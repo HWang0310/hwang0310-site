@@ -21,4 +21,16 @@ describe("homepage content contract", () => {
     expect(hrefs).toContain("https://github.com/HWang0310");
     expect(html).not.toContain("18062752550");
   });
+
+  it("publishes a static paper link", () => {
+    expect(document.querySelector("#paper a")?.getAttribute("href")).toBe(
+      "/assets/papers/wang-hao-rkdg-thesis.pdf"
+    );
+  });
+
+  it("publishes the approved email contact link", () => {
+    expect(document.querySelector("#contact a[href^=\"mailto:\"]")?.getAttribute("href")).toBe(
+      "mailto:hwang0310@163.com"
+    );
+  });
 });
