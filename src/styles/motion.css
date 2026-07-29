@@ -1,0 +1,53 @@
+.button,
+.site-nav a,
+.portrait-toggle,
+.dog-guide,
+.about-portrait-face,
+.portrait-layer {
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    opacity var(--motion-medium) ease,
+    visibility var(--motion-medium) ease,
+    transform var(--motion-medium) var(--ease-out),
+    box-shadow var(--motion-medium) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .button:hover {
+    transform: translate(-2px, -2px);
+  }
+
+  .button-primary:hover,
+  .button-light:hover {
+    box-shadow: 7px 7px 0 var(--color-apricot);
+  }
+
+  .button-secondary:hover {
+    background: var(--color-paper);
+  }
+
+  .portrait-toggle:hover {
+    background: rgba(184, 215, 172, 0.45);
+  }
+
+  .dog-guide:hover {
+    transform: translateY(-4px) rotate(1deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

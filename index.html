@@ -3,41 +3,545 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>王昊 · 数据分析师与 AI 应用创造者</title>
+    <meta
+      name="description"
+      content="王昊的个人作品集：数据分析、收入预测、AI 报告自动化与计算数学研究。"
+    />
+    <meta name="theme-color" content="#fffdf6" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="王昊 · 数据分析、AI 应用与计算数学" />
+    <meta
+      property="og:description"
+      content="从数值计算到经营分析，把复杂系统重新组合成清晰、可靠、可交互的工具。"
+    />
+    <link rel="icon" href="/images/dog-point.webp" type="image/webp" />
+    <link
+      rel="preload"
+      as="image"
+      href="/images/portrait-sage.avif"
+      type="image/avif"
+      fetchpriority="high"
+    />
+    <title>王昊 · 数据分析、AI 应用与计算数学</title>
   </head>
-  <body>
-    <main>
-      <section id="hero" data-chapter="hero">
-        <p>数据分析师 · AI 应用创造者</p>
-        <h1>把复杂问题，做成好用的答案。</h1>
-      </section>
+  <body id="top">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
 
-      <section id="about" data-chapter="about">
-        <h2>认识一下王昊</h2>
-      </section>
+    <header class="site-header">
+      <div class="nav-shell">
+        <a class="brand" href="#top" aria-label="王昊个人网站首页">
+          <span class="brand-mark" aria-hidden="true">W</span>
+          <span>王昊 <span class="brand-separator">·</span> Hwang</span>
+        </a>
 
-      <section id="work" data-chapter="work">
-        <h2>收入预估 2.0</h2>
-        <p>
-          <a href="https://hwang0310.dpdns.org/projects/income-forecast/">查看收入预估项目</a>
-        </p>
-      </section>
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-controls="site-navigation"
+          aria-expanded="false"
+          aria-label="打开主导航"
+          data-nav-toggle
+          hidden
+        >
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </button>
 
-      <section id="paper" data-chapter="paper">
-        <h2>学术研究</h2>
-        <p><a href="/assets/papers/wang-hao-rkdg-thesis.pdf">阅读论文（PDF）</a></p>
-      </section>
+        <nav
+          id="site-navigation"
+          class="site-nav"
+          aria-label="主导航"
+          data-site-nav
+        >
+          <a href="#about">关于</a>
+          <a href="#work">作品</a>
+          <a href="#paper">论文</a>
+          <a href="#journey">经历</a>
+          <a href="#contact">联系</a>
+        </nav>
+      </div>
+    </header>
 
-      <section id="journey" data-chapter="journey">
-        <h2>经历与方法</h2>
-      </section>
+    <main id="main-content" class="site-main">
+      <div class="content-column">
+        <section id="hero" class="chapter hero" data-chapter="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">数据分析师 · AI 应用创造者 · 计算数学</p>
+            <h1>把复杂问题，<br />做成好用的答案。</h1>
+            <p class="hero-intro">
+              从数值计算到经营分析，把复杂系统拆开、理解，再重新组合成清晰、可靠、可交互的工具。
+            </p>
+            <div class="hero-actions" aria-label="首页快捷入口">
+              <a class="button button-primary" href="#work">
+                查看作品
+                <span aria-hidden="true">↘</span>
+              </a>
+              <a class="button button-secondary" href="#about">认识一下</a>
+            </div>
+          </div>
 
-      <section id="contact" data-chapter="contact">
-        <h2>联系王昊</h2>
-        <p><a href="mailto:hwang0310@163.com">hwang0310@163.com</a></p>
-        <p><a href="https://github.com/HWang0310">GitHub</a></p>
-      </section>
+          <figure class="mobile-portrait">
+            <picture>
+              <source srcset="/images/portrait-mobile.webp" type="image/webp" />
+              <img
+                src="/images/portrait-mobile.jpg"
+                width="900"
+                height="1600"
+                alt="王昊的暖色手绘风格肖像"
+                fetchpriority="high"
+              />
+            </picture>
+            <figcaption>你好，我是王昊。欢迎往下看看。</figcaption>
+          </figure>
+
+          <div
+            class="doodle doodle-chalk doodle-chalk-hero"
+            data-decoration="chalk-line"
+            data-doodle
+            aria-hidden="true"
+          ></div>
+        </section>
+
+        <section id="about" class="chapter about" data-chapter="about">
+          <div class="section-heading">
+            <p class="eyebrow">01 / ABOUT</p>
+            <h2>一边研究误差，<br />一边解决现实问题。</h2>
+          </div>
+
+          <div class="about-grid">
+            <div class="about-copy">
+              <p class="lead">
+                我是王昊，一名带着计算数学训练做经营分析的数据分析师。我喜欢找到系统里真正起作用的结构，再把它变成团队能理解、能复用的工具。
+              </p>
+              <ul class="fact-list" aria-label="教育与职业背景">
+                <li>
+                  <span class="fact-kicker">现在</span>
+                  <strong>中国电信湖北省分公司</strong>
+                  <span>数据分析师</span>
+                </li>
+                <li>
+                  <span class="fact-kicker">硕士</span>
+                  <strong>厦门大学</strong>
+                  <span>计算数学</span>
+                </li>
+                <li>
+                  <span class="fact-kicker">本科</span>
+                  <strong>中国地质大学（武汉）</strong>
+                  <span>信息与计算科学</span>
+                </li>
+              </ul>
+            </div>
+
+            <div
+              class="about-portrait-card"
+              data-about-portrait
+              data-face="ai"
+            >
+              <div class="about-portrait-faces">
+                <picture class="about-portrait-face" data-portrait-ai>
+                  <source srcset="/images/portrait-sage.avif" type="image/avif" />
+                  <source srcset="/images/portrait-sage.webp" type="image/webp" />
+                  <img
+                    src="/images/portrait-sage.jpg"
+                    width="900"
+                    height="1600"
+                    alt="王昊的鼠尾草绿色 AI 肖像"
+                    loading="lazy"
+                  />
+                </picture>
+                <picture
+                  class="about-portrait-face about-portrait-real"
+                  data-portrait-real
+                  aria-hidden="true"
+                >
+                  <source srcset="/images/portrait-real.webp" type="image/webp" />
+                  <img
+                    src="/images/portrait-real.jpg"
+                    width="1207"
+                    height="1600"
+                    alt=""
+                    loading="lazy"
+                  />
+                </picture>
+              </div>
+              <button
+                class="portrait-toggle"
+                type="button"
+                aria-label="切换 AI 肖像与真实照片，当前显示 AI 肖像"
+                aria-pressed="false"
+                data-portrait-toggle
+              >
+                <span class="portrait-toggle-icon" aria-hidden="true">↻</span>
+                <span>翻到真实照片</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="capability-block">
+            <p class="handwritten-note">常用的工具，也是一组思考方式</p>
+            <ul class="chip-list" aria-label="专业能力">
+              <li>Python</li>
+              <li>PySpark</li>
+              <li>Spark SQL</li>
+              <li>PyTorch</li>
+              <li>C++</li>
+              <li>MATLAB</li>
+              <li>时间序列预测</li>
+              <li>数据治理</li>
+              <li>数值计算</li>
+            </ul>
+          </div>
+
+          <div
+            class="doodle doodle-star doodle-star-about"
+            data-decoration="star"
+            data-doodle
+            aria-hidden="true"
+          ></div>
+        </section>
+
+        <section id="work" class="chapter work" data-chapter="work">
+          <div class="section-heading section-heading-row">
+            <div>
+              <p class="eyebrow">02 / SELECTED WORK</p>
+              <h2>让预测真正走进<br />每天的业务流程。</h2>
+            </div>
+            <p class="section-aside">
+              从数据登记、清洗、预测到交付，做的是一个能稳定重跑、持续验证的完整系统。
+            </p>
+          </div>
+
+          <article
+            class="featured-project"
+            data-project="income-forecast"
+            aria-labelledby="income-forecast-title"
+          >
+            <div class="project-intro">
+              <div>
+                <p class="project-label">FEATURED PROJECT · 2026</p>
+                <h3 id="income-forecast-title">湖北电信收入预估 2.0</h3>
+                <p>
+                  面向湖北全省经营分析的日常预测系统。它把跨来源、跨账期的复杂数据整理成可追踪的预测结果，也把每次运行沉淀为下一轮可以继续复用的能力。
+                </p>
+              </div>
+              <img
+                class="project-dog"
+                src="/images/dog-inspect.webp"
+                width="275"
+                height="320"
+                alt=""
+                loading="lazy"
+                aria-hidden="true"
+              />
+            </div>
+
+            <dl class="metric-grid" aria-label="收入预估项目核心指标">
+              <div>
+                <dt>17 个地市</dt>
+                <dd>全省经营单元</dd>
+              </div>
+              <div>
+                <dt>18 类业务</dt>
+                <dd>统一预测口径</dd>
+              </div>
+              <div>
+                <dt>289 个日登记/清洗键</dt>
+                <dd>源数据治理范围</dd>
+              </div>
+              <div>
+                <dt>255 个正式预测键</dt>
+                <dd>稳定产出结果</dd>
+              </div>
+              <div>
+                <dt>54 个模拟预测日</dt>
+                <dd>覆盖 2025-01 至 2026-06</dd>
+              </div>
+              <div class="metric-highlight">
+                <dt>3.20% WMAPE</dt>
+                <dd>明细预测误差</dd>
+              </div>
+              <div class="metric-highlight">
+                <dt>0.45% 合计偏差</dt>
+                <dd>整体规模控制</dd>
+              </div>
+            </dl>
+
+            <div class="delivery-panel">
+              <p class="delivery-title">一轮稳定运行的时间账本</p>
+              <ol class="delivery-steps">
+                <li><strong>约 30 分钟</strong><span>数据采集与清洗</span></li>
+                <li><strong>约 20 分钟</strong><span>预测计算</span></li>
+                <li><strong>约 50 分钟</strong><span>端到端整体运行</span></li>
+                <li>
+                  <strong>人工 5–10 分钟</strong>
+                  <span>生成 Word 与交互式 HTML 报告</span>
+                </li>
+              </ol>
+            </div>
+
+            <div class="project-footer">
+              <p>结果可核验，流程可重跑，报告可直接交付。</p>
+              <a
+                class="button button-light"
+                href="https://hwang0310.dpdns.org/projects/income-forecast/"
+              >
+                查看收入预估项目
+                <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+          </article>
+
+          <article
+            class="automation-card"
+            data-project="ai-automation"
+            aria-labelledby="automation-title"
+          >
+            <div class="automation-heading">
+              <p class="project-label">AI APPLICATION</p>
+              <h3 id="automation-title">报告自动化工作流</h3>
+              <p>
+                把一次性的分析过程整理为可复用路径：数据到达后，系统完成整理、预测和成稿，分析师把时间留给判断、校验与沟通。
+              </p>
+            </div>
+            <ol class="workflow-list" aria-label="报告自动化流程">
+              <li>
+                <span>01</span>
+                <strong>采集</strong>
+                <p>汇集当日经营数据，记录来源与批次。</p>
+              </li>
+              <li>
+                <span>02</span>
+                <strong>清洗</strong>
+                <p>统一口径，发现缺口，把异常留痕。</p>
+              </li>
+              <li>
+                <span>03</span>
+                <strong>预测</strong>
+                <p>按业务特征计算，并用历史回放持续校验。</p>
+              </li>
+              <li>
+                <span>04</span>
+                <strong>交付</strong>
+                <p>同步生成 Word 与交互式 HTML，兼顾汇报和探索。</p>
+              </li>
+            </ol>
+            <p class="automation-result">
+              一次配置，多次复用；既缩短交付时间，也让方法、口径和结果始终对得上。
+            </p>
+          </article>
+
+          <div
+            class="doodle doodle-arrow doodle-arrow-work"
+            data-decoration="arrow"
+            data-doodle
+            aria-hidden="true"
+          ></div>
+        </section>
+
+        <section id="paper" class="chapter paper" data-chapter="paper">
+          <div class="section-heading">
+            <p class="eyebrow">03 / RESEARCH</p>
+            <h2>从证明“为什么”，<br />到解决“怎么办”。</h2>
+          </div>
+
+          <article class="paper-card" aria-labelledby="paper-title">
+            <div class="paper-number" aria-hidden="true">∫</div>
+            <div class="paper-body">
+              <p class="paper-meta">厦门大学计算数学硕士学位论文，2023 年</p>
+              <h3 id="paper-title">基于三角函数基 RKDG 方法的误差分析</h3>
+              <p>
+                研究三角函数基下的 RKDG 方法，并结合 SIAC
+                后处理讨论数值解的误差与超收敛性质。论文训练留下的不只是公式，更是一套从假设、推导到验证的严谨路径。
+              </p>
+              <a
+                class="text-link"
+                href="/assets/papers/wang-hao-rkdg-thesis.pdf"
+              >
+                阅读硕士论文（PDF）
+                <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+          </article>
+        </section>
+
+        <section id="journey" class="chapter journey" data-chapter="journey">
+          <div class="section-heading section-heading-row">
+            <div>
+              <p class="eyebrow">04 / JOURNEY</p>
+              <h2>一路把理论，<br />带到更真实的现场。</h2>
+            </div>
+            <p class="handwritten-note journey-note">每一步，都在扩大问题的尺度</p>
+          </div>
+
+          <ol class="timeline" aria-label="教育与职业经历">
+            <li>
+              <time>2016–2020</time>
+              <div>
+                <h3>中国地质大学（武汉）</h3>
+                <p>信息与计算科学</p>
+              </div>
+            </li>
+            <li>
+              <time>2020–2023</time>
+              <div>
+                <h3>厦门大学</h3>
+                <p>计算数学硕士</p>
+              </div>
+            </li>
+            <li>
+              <time datetime="2022">2022</time>
+              <div>
+                <h3>中元汇吉生物技术股份有限公司</h3>
+                <p>分类算法实习</p>
+              </div>
+            </li>
+            <li>
+              <time>2022–2023</time>
+              <div>
+                <h3>北京大学重庆大数据研究院·数值计算实验室</h3>
+                <p>自动驾驶算法实习</p>
+              </div>
+            </li>
+            <li>
+              <time>2023–至今</time>
+              <div>
+                <h3>中国电信湖北省分公司</h3>
+                <p>数据分析师</p>
+              </div>
+            </li>
+          </ol>
+
+          <img
+            class="journey-dog"
+            src="/images/dog-run.webp"
+            width="320"
+            height="287"
+            alt=""
+            loading="lazy"
+            aria-hidden="true"
+          />
+          <div
+            class="doodle doodle-pawprints"
+            data-decoration="pawprints"
+            data-doodle
+            aria-hidden="true"
+          ></div>
+        </section>
+
+        <section id="contact" class="chapter contact" data-chapter="contact">
+          <div class="contact-card">
+            <div class="contact-copy">
+              <p class="eyebrow">05 / SAY HELLO</p>
+              <h2>有复杂的问题，<br />欢迎一起拆开看看。</h2>
+              <p>
+                如果你正在做数据分析、预测系统、AI 应用或数值计算相关的事情，很高兴和你交换思路。
+              </p>
+            </div>
+
+            <address class="contact-list">
+              <a href="mailto:hwang0310@163.com">
+                <span>邮箱</span>
+                <strong>hwang0310@163.com</strong>
+                <span aria-hidden="true">↗</span>
+              </a>
+              <a href="https://github.com/HWang0310">
+                <span>GitHub</span>
+                <strong>github.com/HWang0310</strong>
+                <span aria-hidden="true">↗</span>
+              </a>
+              <a href="https://hwang0310.dpdns.org/">
+                <span>网站</span>
+                <strong>hwang0310.dpdns.org</strong>
+                <span aria-hidden="true">↗</span>
+              </a>
+            </address>
+
+            <img
+              class="contact-dog"
+              src="/images/dog-rest.webp"
+              width="320"
+              height="192"
+              alt="暖黄色小狗安静地趴下休息"
+              loading="lazy"
+            />
+          </div>
+
+          <footer class="site-footer">
+            <p>© 2026 王昊 · Hwang</p>
+            <div>
+              <a href="/assets/papers/wang-hao-rkdg-thesis.pdf">论文快捷入口</a>
+              <a href="#top">返回顶部 ↑</a>
+            </div>
+          </footer>
+        </section>
+      </div>
+
+      <aside class="portrait-column" aria-label="王昊肖像与小狗向导">
+        <div class="portrait-sticky">
+          <div class="portrait-frame" data-portrait-stage data-state="sage">
+            <picture class="portrait-layer portrait-layer-sage" data-portrait-sage>
+              <source srcset="/images/portrait-sage.avif" type="image/avif" />
+              <source srcset="/images/portrait-sage.webp" type="image/webp" />
+              <img
+                src="/images/portrait-sage.jpg"
+                width="900"
+                height="1600"
+                alt="王昊的鼠尾草绿色手绘风格肖像"
+                fetchpriority="high"
+              />
+            </picture>
+            <picture
+              class="portrait-layer portrait-layer-warm"
+              data-portrait-warm
+              aria-hidden="true"
+            >
+              <source srcset="/images/portrait-warm.avif" type="image/avif" />
+              <source srcset="/images/portrait-warm.webp" type="image/webp" />
+              <img
+                src="/images/portrait-warm.jpg"
+                width="900"
+                height="1600"
+                alt=""
+                loading="lazy"
+              />
+            </picture>
+
+            <div
+              class="doodle doodle-star doodle-star-stage"
+              data-decoration="star"
+              data-doodle
+              aria-hidden="true"
+            ></div>
+            <div
+              class="doodle doodle-arrow doodle-arrow-stage"
+              data-decoration="arrow"
+              data-doodle
+              aria-hidden="true"
+            ></div>
+          </div>
+
+          <button
+            class="dog-guide"
+            type="button"
+            aria-label="小狗向导：前往作品"
+            data-dog-guide
+          >
+            <img
+              src="/images/dog-point.webp"
+              width="284"
+              height="320"
+              alt=""
+              loading="lazy"
+              data-dog-pose
+              data-pose="point"
+            />
+            <span>往下走，作品在这里</span>
+          </button>
+        </div>
+      </aside>
     </main>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
