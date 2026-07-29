@@ -2,8 +2,7 @@
 .site-nav a,
 .portrait-toggle,
 .dog-guide,
-.about-portrait-face,
-.portrait-layer {
+.about-portrait-face {
   transition:
     color var(--motion-fast) ease,
     background-color var(--motion-fast) ease,
@@ -12,6 +11,52 @@
     visibility var(--motion-medium) ease,
     transform var(--motion-medium) var(--ease-out),
     box-shadow var(--motion-medium) var(--ease-out);
+}
+
+.portrait-layer {
+  transition:
+    opacity var(--motion-slow) var(--ease-out),
+    transform var(--motion-slow) var(--ease-out);
+}
+
+html[data-enhanced="true"] [data-portrait-stage][data-state="sage"] [data-portrait-sage],
+html[data-enhanced="true"] [data-portrait-stage][data-state="warm"] [data-portrait-warm] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+html[data-enhanced="true"] [data-portrait-stage][data-state="sage"] [data-portrait-warm],
+html[data-enhanced="true"] [data-portrait-stage][data-state="warm"] [data-portrait-sage] {
+  opacity: 0;
+  transform: translateY(0.5rem);
+}
+
+html[data-enhanced="true"] [data-doodle] {
+  transition: transform var(--motion-slow) var(--ease-out);
+}
+
+html[data-enhanced="true"][data-active-chapter="hero"] .doodle-chalk-hero {
+  transform: translateY(-8px) rotate(-10deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="about"] .doodle-star-about {
+  transform: translateY(7px) rotate(18deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="work"] .doodle-arrow-work {
+  transform: translateY(-10px) rotate(35deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="journey"] .doodle-pawprints {
+  transform: translateY(6px) rotate(-8deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="hero"] .doodle-star-stage {
+  transform: translateY(-4px) rotate(17deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="work"] .doodle-arrow-stage {
+  transform: translateY(8px) rotate(125deg);
 }
 
 @media (hover: hover) {
