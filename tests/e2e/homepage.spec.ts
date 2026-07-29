@@ -7,7 +7,12 @@ const expectedTitle = "王昊 · 数据分析、AI 应用与计算数学";
 const expectedDescription =
   "王昊的个人作品集：收入预测、数据治理、AI 自动化与计算数学研究。";
 const projectURL = "https://hwang0310.dpdns.org/projects/income-forecast/";
-const reportDates = ["20", "24", "25", "26"];
+const expectedReports = [
+  { day: "20", date: "20260720" },
+  { day: "24", date: "20260724" },
+  { day: "25", date: "20260725" },
+  { day: "26", date: "20260726" },
+];
 
 test("publishes complete search and social metadata", async ({ page }) => {
   await page.goto("/");
@@ -119,17 +124,40 @@ test("report archive and thesis are served from the built site", async (
     "/assets/papers/wang-hao-rkdg-thesis.pdf"
   );
 
-  const paths = [
-    "/projects/income-forecast/",
-    "/projects/income-forecast/archive-manifest.js",
-    "/assets/papers/wang-hao-rkdg-thesis.pdf",
-    ...reportDates.map(
-      (day) => `/projects/income-forecast/reports/2026/07/${day}/`
-    ),
-  ];
-  for (const path of paths) {
-    const response = await page.request.get(path);
-    expect(response.ok(), `${path} should be served from dist`).toBe(true);
+  const archiveLanding = await page.request.get("/projects/income-forecast/");
+  expect(archiveLanding.ok()).toBe(true);
+  expect(archiveLanding.headers()["content-type"]).toContain("text/html");
+  expect(await archiveLanding.text()).toContain(
+    "<title>湖北电信收入预估报告</title>"
+  );
+
+  const manifest = await page.request.get(
+    "/projects/income-forecast/archive-manifest.js"
+  );
+  expect(manifest.ok()).toBe(true);
+  expect(manifest.headers()["content-type"]).toMatch(
+    /(?:text|application)\/javascript/
+  );
+  const manifestBody = await manifest.text();
+  for (const { date } of expectedReports) {
+    expect(manifestBody).toContain(`"date":"${date}"`);
+  }
+
+  const pdf = await page.request.get(
+    "/assets/papers/wang-hao-rkdg-thesis.pdf"
+  );
+  expect(pdf.ok()).toBe(true);
+  expect(pdf.headers()["content-type"]).toContain("application/pdf");
+  expect((await pdf.body()).subarray(0, 5).toString("ascii")).toBe("%PDF-");
+
+  for (const { day, date } of expectedReports) {
+    const path = `/projects/income-forecast/reports/2026/07/${day}/`;
+    const report = await page.request.get(path);
+    expect(report.ok(), `${path} should be served from dist`).toBe(true);
+    expect(report.headers()["content-type"]).toContain("text/html");
+    const reportHTML = await report.text();
+    expect(reportHTML).toContain(`<title>收入预估报告-${date}</title>`);
+    expect(reportHTML).toContain(`data-report-date="${date}"`);
   }
 });
 
