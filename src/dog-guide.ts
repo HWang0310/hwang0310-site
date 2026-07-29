@@ -41,6 +41,23 @@ const chapterActions: Record<ChapterId, { label: string; copy: string }> = {
 
 const requestedPoseVersions = new WeakMap<HTMLImageElement, number>();
 
+type DogImageState = {
+  src: string | null;
+  alt: string | null;
+  pose: string | null;
+};
+
+function nextPoseVersion(element: HTMLImageElement): number {
+  const version = (requestedPoseVersions.get(element) ?? 0) + 1;
+  requestedPoseVersions.set(element, version);
+  return version;
+}
+
+function restoreAttribute(element: Element, name: string, value: string | null): void {
+  if (value === null) element.removeAttribute(name);
+  else element.setAttribute(name, value);
+}
+
 export function dogPoseForChapter(chapter: ChapterId): DogPose {
   return poseByChapter[chapter];
 }
@@ -49,8 +66,7 @@ export function setDogPose(element: HTMLImageElement, pose: DogPose): void {
   const ImageConstructor = element.ownerDocument.defaultView?.Image;
   if (!ImageConstructor) return;
 
-  const version = (requestedPoseVersions.get(element) ?? 0) + 1;
-  requestedPoseVersions.set(element, version);
+  const version = nextPoseVersion(element);
   const detail = poseDetails[pose];
   const preloadedImage = new ImageConstructor();
 
@@ -91,8 +107,26 @@ export function setDogGuideChapter(root: Document, chapter: ChapterId): void {
 }
 
 export function initDogGuide(root: Document): () => void {
+  const initialDogImages = [...root.querySelectorAll<HTMLImageElement>("[data-dog-pose]")].map(
+    (element) => ({
+      element,
+      state: {
+        src: element.getAttribute("src"),
+        alt: element.getAttribute("alt"),
+        pose: element.getAttribute("data-pose"),
+      } satisfies DogImageState,
+    })
+  );
+  const restoreDogImages = () => {
+    initialDogImages.forEach(({ element, state }) => {
+      nextPoseVersion(element);
+      restoreAttribute(element, "src", state.src);
+      restoreAttribute(element, "alt", state.alt);
+      restoreAttribute(element, "data-pose", state.pose);
+    });
+  };
   const buttons = [...root.querySelectorAll<HTMLButtonElement>("[data-dog-guide]")];
-  if (buttons.length === 0) return () => undefined;
+  if (buttons.length === 0) return restoreDogImages;
 
   const cleanups = buttons.map((button) => {
     const initialHidden = button.hidden;
@@ -155,5 +189,8 @@ export function initDogGuide(root: Document): () => void {
     };
   });
 
-  return () => cleanups.forEach((cleanup) => cleanup());
+  return () => {
+    cleanups.forEach((cleanup) => cleanup());
+    restoreDogImages();
+  };
 }

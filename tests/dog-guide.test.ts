@@ -195,6 +195,36 @@ describe("initDogGuide", () => {
     expect(workScrolls()).toBe(0);
   });
 
+  it("restores every dog image attribute captured before chapter pose updates", () => {
+    const root = createDocument();
+    const loaders = installImageStub(root);
+    const dog = root.querySelector<HTMLImageElement>("[data-dog-pose]")!;
+    const cleanup = initDogGuide(root);
+
+    setDogPose(dog, "rest");
+    loaders[0]?.load();
+    cleanup();
+
+    expect(dog.getAttribute("src")).toBe("/images/dog-point.webp");
+    expect(dog.getAttribute("alt")).toBe("小狗指向下一段内容");
+    expect(dog.getAttribute("data-pose")).toBe("point");
+  });
+
+  it("invalidates a pending dog image load when the guide is cleaned up", () => {
+    const root = createDocument();
+    const loaders = installImageStub(root);
+    const dog = root.querySelector<HTMLImageElement>("[data-dog-pose]")!;
+    const cleanup = initDogGuide(root);
+
+    setDogPose(dog, "rest");
+    cleanup();
+    loaders[0]?.load();
+
+    expect(dog.getAttribute("src")).toBe("/images/dog-point.webp");
+    expect(dog.getAttribute("alt")).toBe("小狗指向下一段内容");
+    expect(dog.getAttribute("data-pose")).toBe("point");
+  });
+
   it("reveals mobile guides only after enhancement and restores their no-JavaScript state", () => {
     const root = createDocument();
     const button = root.querySelector<HTMLButtonElement>("[data-dog-guide]")!;
