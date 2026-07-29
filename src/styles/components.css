@@ -49,6 +49,7 @@
 }
 
 .nav-toggle {
+  display: none;
   position: relative;
   width: 44px;
   padding: 0;
@@ -809,6 +810,40 @@
   .site-nav a {
     flex: 0 0 auto;
     padding-inline: 0.55rem;
+  }
+
+  html[data-enhanced="true"] .nav-shell {
+    position: relative;
+  }
+
+  html[data-enhanced="true"] .nav-toggle {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  html[data-enhanced="true"] .site-nav {
+    position: absolute;
+    z-index: 1;
+    top: calc(100% - 0.4rem);
+    right: 0;
+    display: none;
+    width: min(18rem, calc(100vw - 2rem));
+    max-width: none;
+    padding: 0.5rem;
+    overflow: visible;
+    border: 1px solid var(--color-ink);
+    border-radius: var(--radius-medium);
+    background: var(--color-cream);
+    box-shadow: var(--shadow-soft);
+  }
+
+  html[data-enhanced="true"] .site-nav[data-open="true"] {
+    display: grid;
+  }
+
+  html[data-enhanced="true"] .site-nav a {
+    justify-content: flex-start;
+    padding-inline: 0.8rem;
   }
 
   .project-intro {
