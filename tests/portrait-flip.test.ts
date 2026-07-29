@@ -5,8 +5,10 @@ import { initPortraitFlip } from "../src/portrait-flip";
 function createDocument(): Document {
   return new JSDOM(`
     <article data-about-portrait data-face="ai">
+      <picture data-portrait-ai aria-hidden="false"><img alt="AI 肖像" /></picture>
+      <picture data-portrait-real aria-hidden="true"><img alt="真实照片" /></picture>
       <button type="button" aria-pressed="false" data-portrait-toggle>
-        <span>翻到真实照片</span>
+        <span>查看真实照片</span>
       </button>
     </article>
   `).window.document;
@@ -23,7 +25,14 @@ describe("initPortraitFlip", () => {
 
     expect(button.getAttribute("aria-pressed")).toBe("true");
     expect(card.dataset.face).toBe("real");
-    expect(button.textContent).toContain("翻到 AI 肖像");
+    expect(button.getAttribute("aria-label")).toBe("查看 AI 肖像");
+    expect(button.textContent).toContain("查看 AI 肖像");
+    expect(root.querySelector("[data-portrait-ai]")?.getAttribute("aria-hidden")).toBe(
+      "true"
+    );
+    expect(root.querySelector("[data-portrait-real]")?.getAttribute("aria-hidden")).toBe(
+      "false"
+    );
   });
 
   it("uses Space without scrolling and toggles only once", () => {

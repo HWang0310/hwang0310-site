@@ -1,6 +1,6 @@
 const labels = {
-  ai: "翻到真实照片",
-  real: "翻到 AI 肖像",
+  ai: "查看真实照片",
+  real: "查看 AI 肖像",
 } as const;
 
 type PortraitFace = keyof typeof labels;
@@ -26,10 +26,13 @@ function setPortraitFace(
 ): void {
   card.dataset.face = face;
   button.setAttribute("aria-pressed", String(face === "real"));
-  button.setAttribute(
-    "aria-label",
-    `切换 AI 肖像与真实照片，当前显示${face === "real" ? "真实照片" : "AI 肖像"}`
-  );
+  button.setAttribute("aria-label", labels[face]);
+  card
+    .querySelector("[data-portrait-ai]")
+    ?.setAttribute("aria-hidden", String(face !== "ai"));
+  card
+    .querySelector("[data-portrait-real]")
+    ?.setAttribute("aria-hidden", String(face !== "real"));
   setToggleLabel(button, labels[face]);
 }
 
