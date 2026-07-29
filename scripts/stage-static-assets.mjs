@@ -4,6 +4,7 @@ import {
   cp,
   lstat,
   mkdir,
+  mkdtemp,
   readFile,
   readdir,
   realpath,
@@ -20,6 +21,14 @@ import {
   resolve,
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  pathExists,
+  replaceDirectoryAtomically,
+  reportCleanupWarning,
+  validateStaticTree,
+} from "./static-tree.mjs";
+
+export { validateStaticTree } from "./static-tree.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectDirectory = dirname(scriptDirectory);
@@ -198,54 +207,6 @@ async function prevalidateSources({ archiveFile, reportRoot, thesisFile }) {
   return reports.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-async function pathExists(path) {
-  try {
-    await lstat(path);
-    return true;
-  } catch (error) {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  }
-}
-
-/**
- * Rejects symbolic links and local filesystem paths anywhere in a staged site.
- *
- * @param {string} root
- */
-export async function validateStaticTree(root) {
-  await requireDirectory(root, "staged site");
-
-  async function validateDirectory(current) {
-    const entries = await readdir(current, { withFileTypes: true });
-    for (const entry of entries) {
-      const entryPath = join(current, entry.name);
-      const relativePath = relative(root, entryPath);
-      const metadata = await lstat(entryPath);
-
-      if (metadata.isSymbolicLink()) {
-        throw new Error(`Symbolic link found in staged site: ${relativePath}`);
-      }
-      if (metadata.isDirectory()) {
-        await validateDirectory(entryPath);
-        continue;
-      }
-      if (!metadata.isFile()) {
-        throw new Error(`Unsupported staged site resource: ${relativePath}`);
-      }
-
-      const contents = await readFile(entryPath);
-      if (privatePathMarkers.some((marker) => contents.includes(marker))) {
-        throw new Error(
-          `Local filesystem path found in staged site file: ${relativePath}`
-        );
-      }
-    }
-  }
-
-  await validateDirectory(root);
-}
-
 /**
  * @typedef {Object} StaticStagingOptions
  * @property {string} archiveFile
@@ -256,70 +217,137 @@ export async function validateStaticTree(root) {
 
 /**
  * @param {Partial<StaticStagingOptions>} [options]
+ * @param {{
+ *   copyReport?: typeof cp,
+ *   cleanup?: typeof rm,
+ *   swap?: typeof replaceDirectoryAtomically,
+ *   onCleanupWarning?: (error: unknown, context: string) => void
+ * }} [operations]
  * @returns {Promise<{files: number, dates: string[]}>}
  */
-export async function stageStaticAssets(options = {}) {
+export async function stageStaticAssets(options = {}, operations = {}) {
   const resolvedOptions = { ...defaults, ...options };
   const reports = await prevalidateSources(resolvedOptions);
   const distDir = resolve(resolvedOptions.distDir);
+  const copyReport = operations.copyReport ?? cp;
+  const cleanup = operations.cleanup ?? rm;
+  const swap = operations.swap ?? replaceDirectoryAtomically;
+  const onCleanupWarning =
+    operations.onCleanupWarning ?? reportCleanupWarning;
   await mkdir(dirname(distDir), { recursive: true });
-  if (await pathExists(distDir)) {
+  const hasExistingDist = await pathExists(distDir);
+  if (hasExistingDist) {
     await validateStaticTree(distDir);
-  } else {
-    await mkdir(distDir, { recursive: true });
+  }
+  const stagingRoot = await mkdtemp(
+    join(dirname(distDir), ".stage-static-assets-")
+  );
+  const stagedDist = join(stagingRoot, "dist");
+  let primaryError;
+  let committed = false;
+  let result;
+
+  try {
+    if (hasExistingDist) {
+      await cp(distDir, stagedDist, {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
+    } else {
+      await mkdir(stagedDist, { recursive: true });
+    }
+
+    const manifest = reports.map(({ date }) => ({
+      date,
+      webPath: webPathForDate(date),
+    }));
+    const manifestText =
+      `window.INCOME_FORECAST_ARCHIVE = ${JSON.stringify(manifest)};\n`;
+    const reportsTarget = join(
+      stagedDist,
+      archiveWebDirectory,
+      "reports"
+    );
+    const manifestTarget = join(
+      stagedDist,
+      archiveWebDirectory,
+      "archive-manifest.js"
+    );
+    const thesisTarget = join(stagedDist, thesisWebPath);
+
+    await rm(reportsTarget, { recursive: true, force: true });
+    await rm(manifestTarget, { force: true });
+    await rm(thesisTarget, { force: true });
+
+    for (const report of reports) {
+      const stagedReport = join(
+        reportsTarget,
+        report.date.slice(0, 4),
+        report.date.slice(4, 6),
+        report.date.slice(6, 8)
+      );
+      await mkdir(dirname(stagedReport), { recursive: true });
+      await copyReport(report.source, stagedReport, {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
+      if (report.files.includes("assets/archive-manifest.js")) {
+        await writeFile(
+          join(stagedReport, "assets/archive-manifest.js"),
+          manifestText,
+          "utf8"
+        );
+      }
+    }
+
+    await mkdir(dirname(manifestTarget), { recursive: true });
+    await writeFile(manifestTarget, manifestText, "utf8");
+    await mkdir(dirname(thesisTarget), { recursive: true });
+    await copyFile(resolvedOptions.thesisFile, thesisTarget);
+    await validateStaticTree(stagedDist);
+    await swap(
+      { stagedDir: stagedDist, targetDir: distDir },
+      { onCleanupWarning }
+    );
+    committed = true;
+    result = {
+      files:
+        reports.reduce((total, report) => total + report.files.length, 0) + 2,
+      dates: reports.map(({ date }) => date),
+    };
+  } catch (error) {
+    primaryError = error;
   }
 
-  const manifest = reports.map(({ date }) => ({
-    date,
-    webPath: webPathForDate(date),
-  }));
-  const manifestText =
-    `window.INCOME_FORECAST_ARCHIVE = ${JSON.stringify(manifest)};\n`;
-  const reportsTarget = join(distDir, archiveWebDirectory, "reports");
-  const manifestTarget = join(
-    distDir,
-    archiveWebDirectory,
-    "archive-manifest.js"
-  );
-  const thesisTarget = join(distDir, thesisWebPath);
-
-  await rm(reportsTarget, { recursive: true, force: true });
-  await rm(manifestTarget, { force: true });
-  await rm(thesisTarget, { force: true });
-
-  for (const report of reports) {
-    const stagedReport = join(
-      reportsTarget,
-      report.date.slice(0, 4),
-      report.date.slice(4, 6),
-      report.date.slice(6, 8)
-    );
-    await mkdir(dirname(stagedReport), { recursive: true });
-    await cp(report.source, stagedReport, {
-      recursive: true,
-      errorOnExist: true,
-      force: false,
-    });
-    if (report.files.includes("assets/archive-manifest.js")) {
-      await writeFile(
-        join(stagedReport, "assets/archive-manifest.js"),
-        manifestText,
-        "utf8"
+  try {
+    await cleanup(stagingRoot, { recursive: true, force: true });
+  } catch (cleanupError) {
+    if (primaryError) {
+      primaryError = new AggregateError(
+        [primaryError, cleanupError],
+        `Static staging failed and temporary cleanup also failed: ${stagingRoot}`
       );
+    } else if (committed) {
+      try {
+        onCleanupWarning(
+          cleanupError,
+          `Static assets committed; temporary cleanup may remain at ${stagingRoot}`
+        );
+      } catch (notificationError) {
+        reportCleanupWarning(
+          new AggregateError([cleanupError, notificationError]),
+          `Static assets committed; cleanup warning notification failed`
+        );
+      }
+    } else {
+      primaryError = cleanupError;
     }
   }
 
-  await mkdir(dirname(manifestTarget), { recursive: true });
-  await writeFile(manifestTarget, manifestText, "utf8");
-  await mkdir(dirname(thesisTarget), { recursive: true });
-  await copyFile(resolvedOptions.thesisFile, thesisTarget);
-  await validateStaticTree(distDir);
-
-  return {
-    files:
-      reports.reduce((total, report) => total + report.files.length, 0) + 2,
-    dates: reports.map(({ date }) => date),
-  };
+  if (primaryError) throw primaryError;
+  return result;
 }
 
 if (

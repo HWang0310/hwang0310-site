@@ -5,6 +5,7 @@ import {
   readdirSync,
 } from "node:fs";
 import {
+  cp,
   mkdir,
   mkdtemp,
   rm,
@@ -228,6 +229,51 @@ describe("stageStaticAssets", () => {
     expect(readFileSync(manifestTarget, "utf8")).toBe("existing manifest");
     expect(readFileSync(thesisTarget, "utf8")).toBe("existing thesis");
     expect(readdirSync(reportsTarget)).toEqual(["existing"]);
+  });
+
+  it("keeps the supplied output tree intact when copying fails after the first staged report", async () => {
+    const fixture = await createFixture();
+    const reportsTarget = resolve(
+      fixture.distDir,
+      "projects/income-forecast/reports"
+    );
+    const manifestTarget = resolve(
+      fixture.distDir,
+      "projects/income-forecast/archive-manifest.js"
+    );
+    const thesisTarget = resolve(
+      fixture.distDir,
+      "assets/papers/wang-hao-rkdg-thesis.pdf"
+    );
+    await mkdir(join(reportsTarget, "existing"), { recursive: true });
+    await writeFile(join(fixture.distDir, "index.html"), "published homepage");
+    await writeFile(join(reportsTarget, "existing", "sentinel.txt"), "keep");
+    await writeFile(manifestTarget, "published manifest");
+    await mkdir(resolve(fixture.distDir, "assets/papers"), { recursive: true });
+    await writeFile(thesisTarget, "published thesis");
+    let copiedReports = 0;
+
+    await expect(
+      stageStaticAssets(fixture, {
+        copyReport: async (source, target, options) => {
+          await cp(source, target, options);
+          copiedReports += 1;
+          if (copiedReports === 1) {
+            throw new Error("injected copy failure after first report");
+          }
+        },
+      })
+    ).rejects.toThrow("injected copy failure after first report");
+
+    expect(readFileSync(join(fixture.distDir, "index.html"), "utf8")).toBe(
+      "published homepage"
+    );
+    expect(readdirSync(reportsTarget)).toEqual(["existing"]);
+    expect(
+      readFileSync(join(reportsTarget, "existing", "sentinel.txt"), "utf8")
+    ).toBe("keep");
+    expect(readFileSync(manifestTarget, "utf8")).toBe("published manifest");
+    expect(readFileSync(thesisTarget, "utf8")).toBe("published thesis");
   });
 
   it("copies the thesis to its stable name without changing any byte", async () => {

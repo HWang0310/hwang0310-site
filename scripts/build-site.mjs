@@ -1,29 +1,23 @@
 import {
-  lstat,
   mkdir,
   mkdtemp,
-  rename,
   rm,
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   stageStaticAssets,
-  validateStaticTree,
 } from "./stage-static-assets.mjs";
+import {
+  replaceDirectoryAtomically,
+  reportCleanupWarning,
+  validateStaticTree,
+} from "./static-tree.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const defaultProjectDir = dirname(scriptDirectory);
 
-async function pathExists(path) {
-  try {
-    await lstat(path);
-    return true;
-  } catch (error) {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  }
-}
+export { replaceDirectoryAtomically } from "./static-tree.mjs";
 
 async function runViteBuild({ projectDir, outDir }) {
   const { build } = await import("vite");
@@ -37,101 +31,14 @@ async function runViteBuild({ projectDir, outDir }) {
 }
 
 /**
- * @typedef {Object} SwapOperations
- * @property {typeof rename} [rename]
- * @property {typeof rm} [rm]
- */
-
-/**
- * Replaces one complete directory and restores the prior version on every
- * failed install or backup-cleanup path.
- *
- * @param {{stagedDir: string, targetDir: string}} paths
- * @param {SwapOperations} [operations]
- */
-export async function replaceDirectoryAtomically(
-  { stagedDir, targetDir },
-  operations = {}
-) {
-  const renamePath = operations.rename ?? rename;
-  const removePath = operations.rm ?? rm;
-  const resolvedTarget = resolve(targetDir);
-  const targetParent = dirname(resolvedTarget);
-
-  await validateStaticTree(stagedDir);
-  await mkdir(targetParent, { recursive: true });
-
-  if (await pathExists(resolvedTarget)) {
-    const targetMetadata = await lstat(resolvedTarget);
-    if (targetMetadata.isSymbolicLink()) {
-      throw new Error(`Official dist must not be a symbolic link: ${resolvedTarget}`);
-    }
-    if (!targetMetadata.isDirectory()) {
-      throw new Error(`Official dist must be a directory: ${resolvedTarget}`);
-    }
-  }
-
-  const transactionRoot = await mkdtemp(join(targetParent, ".dist-swap-"));
-  const backupDir = join(transactionRoot, "previous");
-  let hasBackup = false;
-  let installed = false;
-
-  try {
-    if (await pathExists(resolvedTarget)) {
-      await renamePath(resolvedTarget, backupDir);
-      hasBackup = true;
-    }
-
-    await renamePath(stagedDir, resolvedTarget);
-    installed = true;
-    await removePath(transactionRoot, { recursive: true, force: true });
-  } catch (primaryError) {
-    const errors = [primaryError];
-    let safeToRemoveTransaction = true;
-
-    if (installed) {
-      try {
-        await removePath(resolvedTarget, { recursive: true, force: true });
-        installed = false;
-      } catch (cleanupError) {
-        errors.push(cleanupError);
-        safeToRemoveTransaction = false;
-      }
-    }
-
-    if (hasBackup) {
-      try {
-        await renamePath(backupDir, resolvedTarget);
-        hasBackup = false;
-      } catch (restoreError) {
-        errors.push(restoreError);
-        safeToRemoveTransaction = false;
-      }
-    }
-
-    if (safeToRemoveTransaction) {
-      try {
-        await removePath(transactionRoot, { recursive: true, force: true });
-      } catch (cleanupError) {
-        errors.push(cleanupError);
-      }
-    }
-
-    if (errors.length === 1) throw primaryError;
-    throw new AggregateError(
-      errors,
-      `Unable to replace official dist; recovery backup: ${backupDir}`
-    );
-  }
-}
-
-/**
  * @typedef {Object} BuildSiteOptions
  * @property {string} [projectDir]
  * @property {string} [distDir]
  * @property {(options: {projectDir: string, outDir: string}) => Promise<void>} [build]
  * @property {(options: object) => Promise<{files: number, dates: string[]}>} [stage]
  * @property {(options: {stagedDir: string, targetDir: string}) => Promise<void>} [swap]
+ * @property {typeof rm} [cleanup]
+ * @property {(error: unknown, context: string) => void} [onCleanupWarning]
  * @property {string} [archiveFile]
  * @property {string} [reportRoot]
  * @property {string} [thesisFile]
@@ -149,14 +56,20 @@ export async function buildSite(options = {}) {
   const build = options.build ?? runViteBuild;
   const stage = options.stage ?? stageStaticAssets;
   const swap = options.swap ?? replaceDirectoryAtomically;
+  const cleanup = options.cleanup ?? rm;
+  const onCleanupWarning =
+    options.onCleanupWarning ?? reportCleanupWarning;
 
   await mkdir(dirname(distDir), { recursive: true });
   const buildRoot = await mkdtemp(join(dirname(distDir), ".build-site-"));
   const stagedDist = join(buildRoot, "dist");
+  let primaryError;
+  let committed = false;
+  let result;
 
   try {
     await build({ projectDir, outDir: stagedDist });
-    const result = await stage({
+    result = await stage({
       archiveFile:
         options.archiveFile ?? join(projectDir, "data/report-archive.json"),
       reportRoot:
@@ -169,10 +82,38 @@ export async function buildSite(options = {}) {
     });
     await validateStaticTree(stagedDist);
     await swap({ stagedDir: stagedDist, targetDir: distDir });
-    return result;
-  } finally {
-    await rm(buildRoot, { recursive: true, force: true });
+    committed = true;
+  } catch (error) {
+    primaryError = error;
   }
+
+  try {
+    await cleanup(buildRoot, { recursive: true, force: true });
+  } catch (cleanupError) {
+    if (primaryError) {
+      primaryError = new AggregateError(
+        [primaryError, cleanupError],
+        `Site build failed and temporary cleanup also failed: ${buildRoot}`
+      );
+    } else if (committed) {
+      try {
+        onCleanupWarning(
+          cleanupError,
+          `Site committed; temporary cleanup may remain at ${buildRoot}`
+        );
+      } catch (notificationError) {
+        reportCleanupWarning(
+          new AggregateError([cleanupError, notificationError]),
+          `Site committed; cleanup warning notification failed`
+        );
+      }
+    } else {
+      primaryError = cleanupError;
+    }
+  }
+
+  if (primaryError) throw primaryError;
+  return result;
 }
 
 if (

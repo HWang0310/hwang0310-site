@@ -82,6 +82,33 @@ describe("buildSite", () => {
     );
   });
 
+  it("preserves the primary build error when temporary cleanup also fails", async () => {
+    const fixture = await createBuildFixture();
+    let caught: unknown;
+
+    try {
+      await buildSite({
+        ...fixture,
+        build: async ({ outDir }) => {
+          await writeBuiltHomepage(outDir);
+          throw new Error("primary build failure");
+        },
+        stage: async () => ({ files: 0, dates: [] }),
+        cleanup: async () => {
+          throw new Error("temporary cleanup failure");
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AggregateError);
+    expect(
+      (caught as AggregateError).errors.map((error: Error) => error.message)
+    ).toEqual(["primary build failure", "temporary cleanup failure"]);
+    expect(readdirSync(fixture.distDir)).toEqual(["old-site.txt"]);
+  });
+
   it("keeps the current dist when static staging fails after a complete temporary build", async () => {
     const fixture = await createBuildFixture();
 
@@ -149,42 +176,68 @@ describe("buildSite", () => {
       "published version"
     );
   });
+
+  it("keeps a committed site successful when build-root cleanup fails", async () => {
+    const fixture = await createBuildFixture();
+    const cleanupWarnings: string[] = [];
+
+    await expect(
+      buildSite({
+        ...fixture,
+        build: async ({ outDir }) => writeBuiltHomepage(outDir),
+        stage: async () => ({ files: 0, dates: [] }),
+        cleanup: async () => {
+          throw new Error("post-commit build-root cleanup failure");
+        },
+        onCleanupWarning: (error) =>
+          cleanupWarnings.push((error as Error).message),
+      })
+    ).resolves.toEqual({ files: 0, dates: [] });
+
+    expect(readFileSync(join(fixture.distDir, "index.html"), "utf8")).toContain(
+      "new complete site"
+    );
+    expect(cleanupWarnings).toEqual([
+      "post-commit build-root cleanup failure",
+    ]);
+  });
 });
 
 describe("replaceDirectoryAtomically", () => {
-  it("rolls back an installed site when backup cleanup fails", async () => {
+  it("keeps the committed new site when backup cleanup partially deletes the old site", async () => {
     const fixture = await createBuildFixture();
     const stagedDir = join(fixture.projectDir, "staged");
     await writeBuiltHomepage(stagedDir);
-    let removeCalls = 0;
+    const cleanupWarnings: string[] = [];
 
     await expect(
       replaceDirectoryAtomically(
         { stagedDir, targetDir: fixture.distDir },
         {
           rm: async (path, options) => {
-            removeCalls += 1;
-            if (removeCalls === 1) {
-              throw new Error("injected backup cleanup failure");
-            }
-            await rm(path, options);
+            await rm(join(path, "previous", "old-site.txt"), { force: true });
+            throw new Error("injected partial backup cleanup failure");
           },
+          onCleanupWarning: (error) =>
+            cleanupWarnings.push((error as Error).message),
         }
       )
-    ).rejects.toThrow("injected backup cleanup failure");
+    ).resolves.toBeUndefined();
 
-    expect(readdirSync(fixture.distDir)).toEqual(["old-site.txt"]);
-    expect(readFileSync(join(fixture.distDir, "old-site.txt"), "utf8")).toBe(
-      "published version"
+    expect(readdirSync(fixture.distDir)).toEqual(["index.html"]);
+    expect(readFileSync(join(fixture.distDir, "index.html"), "utf8")).toContain(
+      "new complete site"
     );
+    expect(cleanupWarnings).toEqual([
+      "injected partial backup cleanup failure",
+    ]);
   });
 
-  it("aggregates cleanup and restore errors while preserving the backup", async () => {
+  it("aggregates install and restore errors while preserving the backup", async () => {
     const fixture = await createBuildFixture();
     const stagedDir = join(fixture.projectDir, "staged");
     await writeBuiltHomepage(stagedDir);
     let renameCalls = 0;
-    let removeCalls = 0;
     let caught: unknown;
 
     try {
@@ -193,21 +246,13 @@ describe("replaceDirectoryAtomically", () => {
         {
           rename: async (source, target) => {
             renameCalls += 1;
+            if (renameCalls === 2) {
+              throw new Error("injected install failure");
+            }
             if (renameCalls === 3) {
               throw new Error("injected restore failure");
             }
             await rename(source, target);
-          },
-          rm: async (path, options) => {
-            removeCalls += 1;
-            if (removeCalls <= 2) {
-              throw new Error(
-                removeCalls === 1
-                  ? "injected backup cleanup failure"
-                  : "injected new-target cleanup failure"
-              );
-            }
-            await rm(path, options);
           },
         }
       );
@@ -220,8 +265,7 @@ describe("replaceDirectoryAtomically", () => {
       (error: Error) => error.message
     );
     expect(messages).toEqual([
-      "injected backup cleanup failure",
-      "injected new-target cleanup failure",
+      "injected install failure",
       "injected restore failure",
     ]);
     const transactionDirectories = readdirSync(fixture.projectDir).filter(
