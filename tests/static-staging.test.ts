@@ -4,7 +4,13 @@ import {
   readFileSync,
   readdirSync,
 } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -146,6 +152,35 @@ describe("stageStaticAssets", () => {
       expect(reportManifest).not.toContain("localPath");
       expect(reportManifest).not.toContain("file:///Users/");
     }
+  });
+
+  it("rejects local filesystem paths in non-manifest files across the staged tree", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      join(
+        fixture.reportRoot,
+        fixture.entries[0].folder,
+        "assets",
+        "report.css"
+      ),
+      "body{background-image:url(file:///Users/example/private.png)}"
+    );
+
+    await expect(stageStaticAssets(fixture)).rejects.toThrow(
+      /local filesystem path.*report\.css/i
+    );
+  });
+
+  it("rejects target-side symbolic links instead of writing through them", async () => {
+    const fixture = await createFixture();
+    const outside = join(fixture.root, "outside");
+    await mkdir(outside);
+    await writeFile(join(outside, "sentinel.txt"), "outside stays untouched");
+    await mkdir(fixture.distDir);
+    await symlink(outside, join(fixture.distDir, "projects"), "dir");
+
+    await expect(stageStaticAssets(fixture)).rejects.toThrow(/symbolic link/i);
+    expect(readdirSync(outside)).toEqual(["sentinel.txt"]);
   });
 
   it.each(["index.html", "cities", "assets"])(

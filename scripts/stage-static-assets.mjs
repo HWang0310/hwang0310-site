@@ -4,11 +4,9 @@ import {
   cp,
   lstat,
   mkdir,
-  mkdtemp,
   readFile,
   readdir,
   realpath,
-  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -37,6 +35,10 @@ const defaults = {
 
 const thesisWebPath = "assets/papers/wang-hao-rkdg-thesis.pdf";
 const archiveWebDirectory = "projects/income-forecast";
+const privatePathMarkers = [
+  Buffer.from("/Users/"),
+  Buffer.from("file:///Users/"),
+];
 
 function isInside(parent, child) {
   const pathFromParent = relative(parent, child);
@@ -180,6 +182,15 @@ async function prevalidateSources({ archiveFile, reportRoot, thesisFile }) {
     await requireDirectory(join(canonicalSource, "cities"), `${entry.date} cities`);
     await requireDirectory(join(canonicalSource, "assets"), `${entry.date} assets`);
     const files = await inventoryDirectory(canonicalSource);
+    for (const file of files) {
+      if (file === "assets/archive-manifest.js") continue;
+      const contents = await readFile(join(canonicalSource, file));
+      if (privatePathMarkers.some((marker) => contents.includes(marker))) {
+        throw new Error(
+          `Local filesystem path found in source report file: ${entry.date}/${file}`
+        );
+      }
+    }
     reports.push({ ...entry, source: canonicalSource, files });
   }
 
@@ -197,34 +208,42 @@ async function pathExists(path) {
   }
 }
 
-async function replaceTargets(replacements, backupRoot) {
-  const backups = [];
-  const installed = [];
+/**
+ * Rejects symbolic links and local filesystem paths anywhere in a staged site.
+ *
+ * @param {string} root
+ */
+export async function validateStaticTree(root) {
+  await requireDirectory(root, "staged site");
 
-  try {
-    for (const [index, replacement] of replacements.entries()) {
-      await mkdir(dirname(replacement.target), { recursive: true });
-      if (await pathExists(replacement.target)) {
-        const backup = join(backupRoot, String(index));
-        await mkdir(dirname(backup), { recursive: true });
-        await rename(replacement.target, backup);
-        backups.push({ target: replacement.target, backup });
+  async function validateDirectory(current) {
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = join(current, entry.name);
+      const relativePath = relative(root, entryPath);
+      const metadata = await lstat(entryPath);
+
+      if (metadata.isSymbolicLink()) {
+        throw new Error(`Symbolic link found in staged site: ${relativePath}`);
+      }
+      if (metadata.isDirectory()) {
+        await validateDirectory(entryPath);
+        continue;
+      }
+      if (!metadata.isFile()) {
+        throw new Error(`Unsupported staged site resource: ${relativePath}`);
+      }
+
+      const contents = await readFile(entryPath);
+      if (privatePathMarkers.some((marker) => contents.includes(marker))) {
+        throw new Error(
+          `Local filesystem path found in staged site file: ${relativePath}`
+        );
       }
     }
-
-    for (const replacement of replacements) {
-      await rename(replacement.staged, replacement.target);
-      installed.push(replacement.target);
-    }
-  } catch (error) {
-    await Promise.all(
-      installed.map((target) => rm(target, { recursive: true, force: true }))
-    );
-    for (const { target, backup } of backups.reverse()) {
-      await rename(backup, target);
-    }
-    throw error;
   }
+
+  await validateDirectory(root);
 }
 
 /**
@@ -244,82 +263,63 @@ export async function stageStaticAssets(options = {}) {
   const reports = await prevalidateSources(resolvedOptions);
   const distDir = resolve(resolvedOptions.distDir);
   await mkdir(dirname(distDir), { recursive: true });
-  const stagingRoot = await mkdtemp(
-    join(dirname(distDir), ".stage-static-assets-")
-  );
-  const stagedDist = join(stagingRoot, "next");
-  const backupRoot = join(stagingRoot, "backup");
-
-  try {
-    const manifest = reports.map(({ date }) => ({
-      date,
-      webPath: webPathForDate(date),
-    }));
-    const manifestText =
-      `window.INCOME_FORECAST_ARCHIVE = ${JSON.stringify(manifest)};\n`;
-
-    for (const report of reports) {
-      const stagedReport = join(
-        stagedDist,
-        archiveWebDirectory,
-        "reports",
-        report.date.slice(0, 4),
-        report.date.slice(4, 6),
-        report.date.slice(6, 8)
-      );
-      await mkdir(dirname(stagedReport), { recursive: true });
-      await cp(report.source, stagedReport, {
-        recursive: true,
-        errorOnExist: true,
-        force: false,
-      });
-      if (report.files.includes("assets/archive-manifest.js")) {
-        await writeFile(
-          join(stagedReport, "assets/archive-manifest.js"),
-          manifestText,
-          "utf8"
-        );
-      }
-    }
-
-    const stagedManifest = join(
-      stagedDist,
-      archiveWebDirectory,
-      "archive-manifest.js"
-    );
-    await mkdir(dirname(stagedManifest), { recursive: true });
-    await writeFile(stagedManifest, manifestText, "utf8");
-
-    const stagedThesis = join(stagedDist, thesisWebPath);
-    await mkdir(dirname(stagedThesis), { recursive: true });
-    await copyFile(resolvedOptions.thesisFile, stagedThesis);
-
-    await replaceTargets(
-      [
-        {
-          staged: join(stagedDist, archiveWebDirectory, "reports"),
-          target: join(distDir, archiveWebDirectory, "reports"),
-        },
-        {
-          staged: stagedManifest,
-          target: join(distDir, archiveWebDirectory, "archive-manifest.js"),
-        },
-        {
-          staged: stagedThesis,
-          target: join(distDir, thesisWebPath),
-        },
-      ],
-      backupRoot
-    );
-
-    return {
-      files:
-        reports.reduce((total, report) => total + report.files.length, 0) + 2,
-      dates: reports.map(({ date }) => date),
-    };
-  } finally {
-    await rm(stagingRoot, { recursive: true, force: true });
+  if (await pathExists(distDir)) {
+    await validateStaticTree(distDir);
+  } else {
+    await mkdir(distDir, { recursive: true });
   }
+
+  const manifest = reports.map(({ date }) => ({
+    date,
+    webPath: webPathForDate(date),
+  }));
+  const manifestText =
+    `window.INCOME_FORECAST_ARCHIVE = ${JSON.stringify(manifest)};\n`;
+  const reportsTarget = join(distDir, archiveWebDirectory, "reports");
+  const manifestTarget = join(
+    distDir,
+    archiveWebDirectory,
+    "archive-manifest.js"
+  );
+  const thesisTarget = join(distDir, thesisWebPath);
+
+  await rm(reportsTarget, { recursive: true, force: true });
+  await rm(manifestTarget, { force: true });
+  await rm(thesisTarget, { force: true });
+
+  for (const report of reports) {
+    const stagedReport = join(
+      reportsTarget,
+      report.date.slice(0, 4),
+      report.date.slice(4, 6),
+      report.date.slice(6, 8)
+    );
+    await mkdir(dirname(stagedReport), { recursive: true });
+    await cp(report.source, stagedReport, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+    if (report.files.includes("assets/archive-manifest.js")) {
+      await writeFile(
+        join(stagedReport, "assets/archive-manifest.js"),
+        manifestText,
+        "utf8"
+      );
+    }
+  }
+
+  await mkdir(dirname(manifestTarget), { recursive: true });
+  await writeFile(manifestTarget, manifestText, "utf8");
+  await mkdir(dirname(thesisTarget), { recursive: true });
+  await copyFile(resolvedOptions.thesisFile, thesisTarget);
+  await validateStaticTree(distDir);
+
+  return {
+    files:
+      reports.reduce((total, report) => total + report.files.length, 0) + 2,
+    dates: reports.map(({ date }) => date),
+  };
 }
 
 if (
