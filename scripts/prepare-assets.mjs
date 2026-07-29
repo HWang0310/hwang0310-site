@@ -72,12 +72,12 @@ export async function prepareAssets({
     {
       source: portraitMobile,
       name: "portrait-mobile",
-      formats: ["webp", "jpeg"],
+      formats: ["webp", "avif", "jpeg"],
     },
     {
       source: portraitReal,
       name: "portrait-real",
-      formats: ["webp", "jpeg"],
+      formats: ["webp", "avif", "jpeg"],
     },
   ];
 

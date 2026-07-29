@@ -61,9 +61,11 @@ describe("homepage content contract", () => {
     expect(document.querySelector("[data-dog-pose]")).not.toBeNull();
 
     const portraitPictures = [
-      ...document.querySelectorAll("[data-portrait-stage] picture, [data-about-portrait] picture"),
+      ...document.querySelectorAll(
+        ".mobile-portrait picture, [data-portrait-stage] picture, [data-about-portrait] picture"
+      ),
     ];
-    expect(portraitPictures.length).toBeGreaterThanOrEqual(4);
+    expect(portraitPictures).toHaveLength(5);
     for (const picture of portraitPictures) {
       const image = picture.querySelector("img");
       expect(image?.hasAttribute("width")).toBe(true);
@@ -77,6 +79,27 @@ describe("homepage content contract", () => {
     expect(document.querySelector("[data-portrait-real] img")?.getAttribute("loading")).toBe(
       "lazy"
     );
+  });
+
+  it("provides AVIF, WebP, and JPEG fallbacks for every portrait picture", () => {
+    const portraitPictures = [
+      ...document.querySelectorAll(
+        ".mobile-portrait picture, [data-portrait-stage] picture, [data-about-portrait] picture"
+      ),
+    ];
+
+    for (const picture of portraitPictures) {
+      const sources = [...picture.querySelectorAll(":scope > source")];
+      const image = picture.querySelector(":scope > img");
+
+      expect(sources.map((source) => source.getAttribute("type"))).toEqual([
+        "image/avif",
+        "image/webp",
+      ]);
+      expect(sources[0]?.getAttribute("srcset")).toMatch(/\.avif$/);
+      expect(sources[1]?.getAttribute("srcset")).toMatch(/\.webp$/);
+      expect(image?.getAttribute("src")).toMatch(/\.jpg$/);
+    }
   });
 
   it("provides accessible controls, navigation, and hidden decoration", () => {
