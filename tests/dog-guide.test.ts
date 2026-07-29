@@ -69,6 +69,33 @@ function recordScroll(element: Element): () => number {
   return () => calls;
 }
 
+function recordScrollOptions(element: Element): () => ScrollIntoViewOptions[] {
+  const calls: ScrollIntoViewOptions[] = [];
+  Object.assign(element, {
+    scrollIntoView: (options: ScrollIntoViewOptions) => {
+      calls.push(options);
+    },
+  });
+  return () => calls;
+}
+
+function installMotionPreference(root: Document, reducedMotion: boolean): void {
+  Object.defineProperty(root.defaultView!, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches:
+        query === "(prefers-reduced-motion: reduce)" && reducedMotion,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => true,
+    }),
+  });
+}
+
 describe("dogPoseForChapter", () => {
   it("maps every chapter to its approved dog pose", () => {
     expect(dogPoseForChapter("hero")).toBe("point");
@@ -116,6 +143,27 @@ describe("setDogPose", () => {
 });
 
 describe("initDogGuide", () => {
+  it.each([
+    { reducedMotion: false, expectedBehavior: "smooth" },
+    { reducedMotion: true, expectedBehavior: "auto" },
+  ] as const)(
+    "requests $expectedBehavior scrolling when reduced motion is $reducedMotion",
+    ({ reducedMotion, expectedBehavior }) => {
+      const root = createDocument();
+      const button = root.querySelector<HTMLButtonElement>("[data-dog-guide]")!;
+      const scrollOptions = recordScrollOptions(root.querySelector("#work")!);
+      installMotionPreference(root, reducedMotion);
+
+      initDogGuide(root);
+      setDogGuideChapter(root, "hero");
+      button.click();
+
+      expect(scrollOptions()).toEqual([
+        { behavior: expectedBehavior, block: "start" },
+      ]);
+    }
+  );
+
   it("sets a chapter-specific accessible label and carries out each guide action", () => {
     const root = createDocument();
     const button = root.querySelector<HTMLButtonElement>("[data-dog-guide]")!;

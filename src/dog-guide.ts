@@ -85,7 +85,16 @@ function chapterFromValue(value: string | undefined): ChapterId {
 }
 
 function scrollTo(element: Element | null): void {
-  element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!element) return;
+
+  const reduceMotion =
+    element.ownerDocument.defaultView
+      ?.matchMedia?.("(prefers-reduced-motion: reduce)")
+      .matches ?? false;
+  element.scrollIntoView({
+    behavior: reduceMotion ? "auto" : "smooth",
+    block: "start",
+  });
 }
 
 function focus(element: HTMLElement | null): void {

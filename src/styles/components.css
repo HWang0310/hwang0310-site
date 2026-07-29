@@ -9,16 +9,16 @@
 }
 
 .brand-mark {
-  display: inline-grid;
+  display: block;
   width: 2rem;
   height: 2rem;
   flex: 0 0 auto;
-  place-items: center;
+  padding: 0.15rem;
   border: 1.5px solid var(--color-ink);
   border-radius: 45% 55% 52% 48%;
   background: var(--color-sage);
-  font-family: var(--font-hand);
-  font-size: 0.92rem;
+  object-fit: contain;
+  object-position: center;
   transform: rotate(-5deg);
 }
 
@@ -444,6 +444,7 @@
   color: var(--color-ink-soft);
 }
 
+.timeline-stage,
 .timeline {
   position: relative;
 }
@@ -800,6 +801,73 @@
   }
 }
 
+@media (min-width: 960px) {
+  .timeline-stage {
+    padding-top: 5rem;
+  }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: clamp(0.45rem, 1vw, 0.8rem);
+  }
+
+  .timeline::before {
+    top: 0.44rem;
+    right: 10%;
+    bottom: auto;
+    left: 10%;
+    width: auto;
+    height: 2px;
+    background: repeating-linear-gradient(
+      to right,
+      var(--color-bluegreen-dark) 0 7px,
+      transparent 7px 13px
+    );
+  }
+
+  .timeline li {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+    min-width: 0;
+    padding: 2.25rem 0.2rem 0;
+  }
+
+  .timeline li::before {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .timeline time {
+    font-size: 0.96rem;
+  }
+
+  .timeline h3 {
+    font-size: clamp(0.92rem, 1.15vw, 1.06rem);
+    line-height: 1.35;
+  }
+
+  .timeline p {
+    font-size: 0.78rem;
+  }
+
+  .journey-dog {
+    position: absolute;
+    z-index: 2;
+    top: -0.7rem;
+    right: 6%;
+    width: 7rem;
+    margin: 0;
+  }
+
+  .doodle-pawprints {
+    top: 1.55rem;
+    right: 15%;
+    bottom: auto;
+  }
+}
+
 @media (max-width: 699px) {
   .site-nav {
     max-width: 68%;
@@ -901,7 +969,8 @@
 
 @media (max-width: 430px) {
   .brand-mark {
-    display: none;
+    width: 1.75rem;
+    height: 1.75rem;
   }
 
   .brand {

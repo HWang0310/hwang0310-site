@@ -183,6 +183,53 @@ test("mobile menu, thesis link, and layout work", async ({ page }, testInfo) => 
   expect(horizontalOverflow).toBeLessThanOrEqual(1);
 });
 
+test("journey is horizontal on desktop and vertical on mobile", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+
+  const layout = await page.locator(".timeline").evaluate((timeline) => {
+    const entries = [
+      ...timeline.querySelectorAll<HTMLElement>(":scope > li"),
+    ].map((entry) => {
+      const rect = entry.getBoundingClientRect();
+      return {
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        left: rect.left,
+      };
+    });
+    const timelineRect = timeline.getBoundingClientRect();
+    const dogRect = document
+      .querySelector<HTMLElement>(".journey-dog")!
+      .getBoundingClientRect();
+
+    return {
+      display: getComputedStyle(timeline).display,
+      entries,
+      timelineTop: timelineRect.top,
+      dogBottom: dogRect.bottom,
+    };
+  });
+
+  expect(layout.entries).toHaveLength(5);
+  const first = layout.entries[0]!;
+  const last = layout.entries[4]!;
+
+  if (testInfo.project.name === "pixel-7") {
+    expect(Math.abs(last.left - first.left)).toBeLessThanOrEqual(1);
+    expect(last.top).toBeGreaterThan(first.bottom);
+  } else {
+    expect(layout.display).toBe("grid");
+    expect(Math.abs(last.top - first.top)).toBeLessThanOrEqual(1);
+    expect(last.left).toBeGreaterThan(first.right);
+    expect(Math.abs(layout.dogBottom - layout.timelineTop)).toBeLessThanOrEqual(
+      32
+    );
+  }
+});
+
 test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
 
@@ -197,11 +244,27 @@ test.describe("without JavaScript", () => {
         name: "作品",
       })
     ).toBeVisible();
+    const journeyEntries = page.locator(".timeline > li");
+    await expect(journeyEntries).toHaveCount(5);
+    await expect(journeyEntries.first()).toBeVisible();
+    await expect(journeyEntries.last()).toBeVisible();
   });
 });
 
 test("reduced-motion preference removes meaningful transitions", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    const calls: ScrollIntoViewOptions[] = [];
+    Object.defineProperty(window, "__dogGuideScrollCalls", {
+      configurable: true,
+      value: calls,
+    });
+    Element.prototype.scrollIntoView = function (
+      options?: boolean | ScrollIntoViewOptions
+    ) {
+      if (typeof options === "object") calls.push(options);
+    };
+  });
   await page.goto("/");
 
   const motion = await page.locator(".button-primary").evaluate((element) => {
@@ -216,6 +279,19 @@ test("reduced-motion preference removes meaningful transitions", async ({ page }
 
   expect(motion.scrollBehavior).toBe("auto");
   expect(Math.max(...motion.transitionDurations)).toBeLessThanOrEqual(0.001);
+
+  await page.locator("[data-dog-guide]:visible").first().click();
+  const dogGuideScrollCalls = await page.evaluate(
+    () =>
+      (
+        window as Window & {
+          __dogGuideScrollCalls: ScrollIntoViewOptions[];
+        }
+      ).__dogGuideScrollCalls
+  );
+  expect(dogGuideScrollCalls).toEqual([
+    { behavior: "auto", block: "start" },
+  ]);
 });
 
 test("content images declare dimensions, load, and do not overflow", async ({

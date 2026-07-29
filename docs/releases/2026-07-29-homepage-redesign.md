@@ -52,7 +52,7 @@
 - GitHub：<https://github.com/HWang0310>
 - 邮箱：<mailto:hwang0310@163.com>
 
-生产首页不包含手机号 `18062752550` 或本地 `file:///Users/` 路径，完整构建目录也未检出这两类隐私标记。
+生产首页不包含私人手机号或本地 `file:///Users/` 路径，完整构建目录也未检出这两类隐私标记。
 
 ## 回滚信息
 
@@ -62,4 +62,3 @@
 - 部署地址：<https://6d1d4bab.hwang0310-site.pages.dev>
 - 分支：`main`
 - 源版本：`30f44c4`
-

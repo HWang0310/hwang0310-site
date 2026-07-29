@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 
 const html = readFileSync(resolve("index.html"), "utf8");
 const document = new JSDOM(html).window.document;
+const releaseNote = readFileSync(
+  resolve("docs/releases/2026-07-29-homepage-redesign.md"),
+  "utf8"
+);
 
 describe("homepage content contract", () => {
   it("publishes the approved identity and sections", () => {
@@ -20,6 +24,20 @@ describe("homepage content contract", () => {
     expect(hrefs).toContain("https://hwang0310.dpdns.org/projects/income-forecast/");
     expect(hrefs).toContain("https://github.com/HWang0310");
     expect(html).not.toContain("18062752550");
+  });
+
+  it("keeps the shareable release note free of the private phone literal", () => {
+    expect(releaseNote).not.toContain("18062752550");
+    expect(releaseNote).toContain("私人手机号");
+  });
+
+  it("uses the existing dog artwork as the decorative brand avatar", () => {
+    const avatar = document.querySelector<HTMLImageElement>(".brand-mark");
+
+    expect(avatar?.getAttribute("src")).toBe("/images/dog-point.webp");
+    expect(avatar?.getAttribute("alt")).toBe("");
+    expect(avatar?.getAttribute("width")).toBe("284");
+    expect(avatar?.getAttribute("height")).toBe("320");
   });
 
   it("publishes a static paper link", () => {
@@ -51,6 +69,20 @@ describe("homepage content contract", () => {
     }
 
     expect(document.querySelector('#work [data-project="ai-automation"]')).not.toBeNull();
+    expect(document.querySelector("#work")?.textContent).toContain("约 3.20%");
+    expect(document.querySelector("#work")?.textContent).toContain(
+      "合计偏差率约 0.45%"
+    );
+  });
+
+  it("keeps the journey as a readable semantic ordered list without JavaScript", () => {
+    const timeline = document.querySelector("ol.timeline");
+    const entries = timeline?.querySelectorAll(":scope > li");
+
+    expect(timeline?.getAttribute("aria-label")).toBe("教育与职业经历");
+    expect(entries).toHaveLength(5);
+    expect(entries?.[0]?.textContent).toContain("中国地质大学（武汉）");
+    expect(entries?.[4]?.textContent).toContain("中国电信湖北省分公司");
   });
 
   it("exposes stable portrait and dog guide hooks without requiring JavaScript", () => {
