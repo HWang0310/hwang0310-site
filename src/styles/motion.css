@@ -82,6 +82,14 @@ html[data-enhanced="true"][data-active-chapter="work"] .doodle-arrow-stage {
   }
 }
 
+@media (max-width: 959px) {
+  .mobile-dog-guide,
+  .mobile-dog-guide:hover {
+    transform: none;
+    transition: opacity var(--motion-medium) ease;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

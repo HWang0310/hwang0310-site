@@ -648,6 +648,10 @@
   transform: rotate(-2deg);
 }
 
+.mobile-dog-guide {
+  display: none;
+}
+
 .doodle {
   position: absolute;
   z-index: 1;
@@ -862,6 +866,36 @@
   .contact-list a {
     grid-template-columns: 3.1rem minmax(0, 1fr) auto;
     gap: 0.5rem;
+  }
+}
+
+@media (max-width: 959px) {
+  html[data-enhanced="true"] .mobile-dog-guide {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    display: none;
+    width: 7.25rem;
+    min-height: 7.25rem;
+    margin-top: var(--space-md);
+  }
+
+  html[data-enhanced="true"] [data-mobile-dog-guide="hero"] {
+    margin-left: auto;
+  }
+
+  html[data-enhanced="true"][data-active-chapter="hero"] [data-mobile-dog-guide="hero"],
+  html[data-enhanced="true"][data-active-chapter="about"] [data-mobile-dog-guide="about"],
+  html[data-enhanced="true"][data-active-chapter="work"] [data-mobile-dog-guide="work"],
+  html[data-enhanced="true"][data-active-chapter="paper"] [data-mobile-dog-guide="paper"],
+  html[data-enhanced="true"][data-active-chapter="journey"] [data-mobile-dog-guide="journey"],
+  html[data-enhanced="true"][data-active-chapter="contact"] [data-mobile-dog-guide="contact"] {
+    display: grid;
+  }
+
+  .mobile-dog-guide img {
+    width: 5.35rem;
+    bottom: 1.45rem;
   }
 }
 
