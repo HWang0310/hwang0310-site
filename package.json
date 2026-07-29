@@ -6,7 +6,7 @@
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "vite build",
+    "build": "vite build && node scripts/stage-static-assets.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test"
   },

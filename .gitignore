@@ -1,5 +1,6 @@
 .worktrees/
 node_modules/
 dist/
+.stage-static-assets-*/
 test-results/
 playwright-report/

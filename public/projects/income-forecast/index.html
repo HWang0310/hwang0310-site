@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="湖北电信收入预估历史报告入口" />
+  <title>湖北电信收入预估报告</title>
+  <style>
+    :root { color-scheme:dark; --bg:#061426; --panel:#0c233a; --line:#234966; --text:#edf8ff; --muted:#9ab2c4; --cyan:#59d5ea; --home-bg:#fff8e8; --home-border:#e1b75d; --home-text:#263238; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; font-family:"PingFang SC","Microsoft YaHei",sans-serif; color:var(--text); background:radial-gradient(circle at 76% 12%,#164766 0,transparent 38%),var(--bg); }
+    header { display:flex; justify-content:space-between; align-items:center; gap:18px; padding:18px clamp(18px,4vw,56px); border-bottom:1px solid var(--line); }
+    header a { color:var(--muted); text-decoration:none; }
+    .home-link { display:inline-flex; align-items:center; justify-content:center; min-height:42px; padding:0 18px; border:1px solid var(--home-border); border-radius:999px; color:var(--home-text); background:var(--home-bg); box-shadow:3px 3px 0 rgba(225,183,93,.32); font-weight:800; transition:transform .18s ease,box-shadow .18s ease; }
+    .home-link:hover { transform:translate(-1px,-1px); box-shadow:5px 5px 0 rgba(225,183,93,.32); }
+    .home-link:focus-visible { outline:3px solid var(--cyan); outline-offset:3px; }
+    main { width:min(980px,calc(100% - 32px)); margin:0 auto; padding:clamp(58px,9vw,110px) 0; }
+    .eyebrow { color:var(--cyan); font-size:12px; letter-spacing:.16em; text-transform:uppercase; }
+    h1 { margin:14px 0; font-size:clamp(38px,7vw,70px); line-height:1.08; }
+    .lead { max-width:720px; color:var(--muted); font-size:17px; line-height:1.8; }
+    .picker { display:grid; grid-template-columns:repeat(3,minmax(120px,1fr)); gap:12px; margin-top:42px; padding:24px; border:1px solid var(--line); border-radius:22px; background:rgba(12,35,58,.86); }
+    label { display:grid; gap:7px; color:var(--muted); font-size:13px; }
+    select { width:100%; border:1px solid var(--line); border-radius:12px; padding:12px; color:var(--text); background:#0a1d31; font:inherit; cursor:pointer; }
+    .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
+    .button { display:inline-flex; align-items:center; justify-content:center; min-height:46px; padding:0 22px; border:1px solid var(--cyan); border-radius:999px; color:#061426; background:linear-gradient(135deg,#60d9ed,#79a9ff); font-weight:800; text-decoration:none; }
+    .secondary { color:var(--text); background:transparent; border-color:var(--line); }
+    .status { margin-top:14px; color:var(--muted); font-size:13px; }
+    @media(max-width:620px){ header{align-items:flex-start;} .home-link{min-height:38px;padding:0 14px;} .picker{grid-template-columns:1fr;} }
+  </style>
+</head>
+<body>
+  <header><strong>湖北电信 · 收入预估</strong><a class="home-link" href="/">返回个人主页</a></header>
+  <main>
+    <span class="eyebrow">Revenue Forecast Archive</span>
+    <h1>选择日期，查看全省及17地市收入预估。</h1>
+    <p class="lead">报告按月内工作节点持续更新。进入报告后可点击湖北地图下钻本地网，并在页面顶部继续切换历史日期。</p>
+    <section class="picker" aria-label="选择报告日期">
+      <label>年份<select data-archive-year></select></label>
+      <label>月份<select data-archive-month></select></label>
+      <label>日期<select data-archive-day></select></label>
+    </section>
+    <div class="actions">
+      <a class="button" href="/projects/income-forecast/reports/2026/07/26/" data-open-selected>打开所选报告 →</a>
+      <a class="button secondary" href="/projects/income-forecast/reports/2026/07/26/">打开最新报告</a>
+    </div>
+    <p class="status" data-status>正在读取报告归档……</p>
+  </main>
+  <script src="./archive-manifest.js"></script>
+  <script>
+    (() => {
+      const entries = (window.INCOME_FORECAST_ARCHIVE || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+      const year = document.querySelector("[data-archive-year]");
+      const month = document.querySelector("[data-archive-month]");
+      const day = document.querySelector("[data-archive-day]");
+      const open = document.querySelector("[data-open-selected]");
+      const status = document.querySelector("[data-status]");
+      const unique = values => [...new Set(values)].sort();
+      const fill = (select, values, selected, suffix) => {
+        select.innerHTML = values.map(value => `<option value="${value}" ${value === selected ? "selected" : ""}>${Number(value)}${suffix}</option>`).join("");
+        if (!values.includes(selected) && values.length) select.value = values[values.length - 1];
+      };
+      if (!entries.length) { status.textContent = "当前暂无可查看报告。"; return; }
+      const latest = entries[entries.length - 1].date;
+      const byYear = () => entries.filter(item => item.date.startsWith(year.value));
+      const byMonth = () => byYear().filter(item => item.date.slice(4,6) === month.value);
+      const refreshLink = () => {
+        const target = entries.find(item => item.date === `${year.value}${month.value}${day.value}`) || entries[entries.length - 1];
+        open.href = target.webPath;
+        status.textContent = `已选择 ${target.date.slice(0,4)}年${Number(target.date.slice(4,6))}月${Number(target.date.slice(6,8))}日`;
+      };
+      fill(year, unique(entries.map(item => item.date.slice(0,4))), latest.slice(0,4), "年");
+      fill(month, unique(byYear().map(item => item.date.slice(4,6))), latest.slice(4,6), "月");
+      fill(day, unique(byMonth().map(item => item.date.slice(6,8))), latest.slice(6,8), "日");
+      year.addEventListener("change", () => {
+        const months = unique(byYear().map(item => item.date.slice(4,6)));
+        fill(month, months, months.at(-1), "月");
+        const days = unique(byMonth().map(item => item.date.slice(6,8)));
+        fill(day, days, days.at(-1), "日");
+        refreshLink();
+      });
+      month.addEventListener("change", () => {
+        const days = unique(byMonth().map(item => item.date.slice(6,8)));
+        fill(day, days, days.at(-1), "日");
+        refreshLink();
+      });
+      day.addEventListener("change", refreshLink);
+      refreshLink();
+    })();
+  </script>
+</body>
+</html>
