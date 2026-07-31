@@ -81,31 +81,41 @@ test("desktop portrait narrative and project link work", async (
   ).toBeVisible();
 });
 
-test("portrait reveals the real photo accessibly", async ({ page }) => {
+test("opening and about portraits reveal the real photo accessibly", async (
+  { page },
+  testInfo
+) => {
   await page.goto("/");
 
-  const toggle = page.locator("[data-portrait-toggle]");
-  await expect(toggle).toHaveAccessibleName("查看真实照片");
-  await toggle.scrollIntoViewIfNeeded();
-  await toggle.click();
+  const switchers =
+    testInfo.project.name === "pixel-7"
+      ? [page.locator(".mobile-portrait"), page.locator("[data-about-portrait]")]
+      : [page.locator(".portrait-sticky"), page.locator("[data-about-portrait]")];
 
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  await expect(toggle).toHaveAccessibleName("查看 AI 肖像");
-  const realPortrait = page.locator("[data-portrait-real]");
-  await expect(realPortrait).toHaveAttribute("aria-hidden", "false");
-  await expect
-    .poll(() =>
-      realPortrait.locator("img").evaluate((element) => {
-        const image = element as HTMLImageElement;
-        return {
-          loaded: image.complete && image.naturalWidth > 0,
-          opacity: Number.parseFloat(
-            getComputedStyle(image.closest("picture")!).opacity
-          ),
-        };
-      })
-    )
-    .toEqual({ loaded: true, opacity: 1 });
+  for (const switcher of switchers) {
+    const toggle = switcher.locator("[data-portrait-toggle]");
+    await expect(toggle).toHaveAccessibleName("查看真实照片");
+    await toggle.scrollIntoViewIfNeeded();
+    await toggle.click();
+
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(toggle).toHaveAccessibleName("查看 AI 肖像");
+    const realPortrait = switcher.locator("[data-portrait-real]");
+    await expect(realPortrait).toHaveAttribute("aria-hidden", "false");
+    await expect
+      .poll(() =>
+        realPortrait.locator("img").evaluate((element) => {
+          const image = element as HTMLImageElement;
+          return {
+            loaded: image.complete && image.naturalWidth > 0,
+            opacity: Number.parseFloat(
+              getComputedStyle(image.closest("picture")!).opacity
+            ),
+          };
+        })
+      )
+      .toEqual({ loaded: true, opacity: 1 });
+  }
 });
 
 test("report archive and thesis are served from the built site", async (

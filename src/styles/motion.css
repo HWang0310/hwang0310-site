@@ -19,6 +19,14 @@
     transform var(--motion-slow) var(--ease-out);
 }
 
+.mobile-portrait-face,
+.portrait-ai-layers,
+.portrait-layer-real {
+  transition:
+    opacity var(--motion-medium) ease,
+    visibility var(--motion-medium) ease;
+}
+
 html[data-enhanced="true"] [data-portrait-stage][data-state="sage"] [data-portrait-sage],
 html[data-enhanced="true"] [data-portrait-stage][data-state="warm"] [data-portrait-warm] {
   opacity: 1;
@@ -29,6 +37,20 @@ html[data-enhanced="true"] [data-portrait-stage][data-state="sage"] [data-portra
 html[data-enhanced="true"] [data-portrait-stage][data-state="warm"] [data-portrait-sage] {
   opacity: 0;
   transform: translateY(0.5rem);
+}
+
+html[data-enhanced="true"]
+  [data-portrait-switcher][data-face="real"]
+  [data-portrait-ai] {
+  visibility: hidden;
+  opacity: 0;
+}
+
+html[data-enhanced="true"]
+  [data-portrait-switcher][data-face="real"]
+  [data-portrait-real] {
+  visibility: visible;
+  opacity: 1;
 }
 
 html[data-enhanced="true"] [data-doodle] {
