@@ -28,11 +28,15 @@ function setPortraitFace(
   button.setAttribute("aria-pressed", String(face === "real"));
   button.setAttribute("aria-label", labels[face]);
   card
-    .querySelector("[data-portrait-ai]")
-    ?.setAttribute("aria-hidden", String(face !== "ai"));
+    .querySelectorAll("[data-portrait-ai]")
+    .forEach((portrait) =>
+      portrait.setAttribute("aria-hidden", String(face !== "ai"))
+    );
   card
-    .querySelector("[data-portrait-real]")
-    ?.setAttribute("aria-hidden", String(face !== "real"));
+    .querySelectorAll("[data-portrait-real]")
+    .forEach((portrait) =>
+      portrait.setAttribute("aria-hidden", String(face !== "real"))
+    );
   setToggleLabel(button, labels[face]);
 }
 
@@ -40,7 +44,7 @@ export function initPortraitFlip(root: Document): () => void {
   const bindings = [...root.querySelectorAll<HTMLButtonElement>("[data-portrait-toggle]")]
     .map((button) => ({
       button,
-      card: button.closest<HTMLElement>("[data-about-portrait]"),
+      card: button.closest<HTMLElement>("[data-portrait-switcher]"),
     }))
     .filter(
       (binding): binding is { button: HTMLButtonElement; card: HTMLElement } =>

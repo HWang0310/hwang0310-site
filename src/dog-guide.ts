@@ -31,8 +31,8 @@ const poseDetails: Record<DogPose, { alt: string; src: string }> = {
 };
 
 const chapterActions: Record<ChapterId, { label: string; copy: string }> = {
-  hero: { label: "小狗向导：前往作品", copy: "往下走，作品在这里" },
-  about: { label: "小狗向导：前往作品", copy: "去看看正在做的作品" },
+  hero: { label: "小狗向导：前往关于", copy: "先来认识一下" },
+  about: { label: "小狗向导：前往经历", copy: "沿着经历继续走" },
   work: { label: "小狗向导：聚焦收入预估项目", copy: "打开收入预估项目" },
   paper: { label: "小狗向导：聚焦硕士论文", copy: "看看这篇硕士论文" },
   journey: { label: "小狗向导：查看下一段经历", copy: "沿着经历继续走" },
@@ -151,8 +151,10 @@ export function initDogGuide(root: Document): () => void {
     const activate = () => {
       switch (chapterFromValue(button.dataset.chapter)) {
         case "hero":
+          scrollTo(root.querySelector("#about"));
+          return;
         case "about":
-          scrollTo(root.querySelector("#work"));
+          scrollTo(root.querySelector("[data-timeline-entry]") ?? root.querySelector("#journey"));
           return;
         case "work":
           focus(

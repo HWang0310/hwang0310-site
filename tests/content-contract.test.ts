@@ -20,6 +20,64 @@ describe("homepage content contract", () => {
     }
   });
 
+  it("follows the approved editorial chapter order and numbering", () => {
+    const chapterIds = [
+      ...document.querySelectorAll<HTMLElement>(".content-column > section.chapter"),
+    ].map((section) => section.id);
+
+    expect(chapterIds).toEqual([
+      "hero",
+      "about",
+      "journey",
+      "work",
+      "paper",
+      "contact",
+    ]);
+    expect(
+      [...document.querySelectorAll(".site-nav a")].map((link) =>
+        link.getAttribute("href")
+      )
+    ).toEqual(["#about", "#journey", "#work", "#paper", "#contact"]);
+    expect(document.querySelector("#about .eyebrow")?.textContent).toContain(
+      "01 / ABOUT"
+    );
+    expect(document.querySelector("#journey .eyebrow")?.textContent).toContain(
+      "02 / JOURNEY"
+    );
+    expect(document.querySelector("#work .eyebrow")?.textContent).toContain(
+      "03 / SELECTED WORK"
+    );
+    expect(document.querySelector("#paper .eyebrow")?.textContent).toContain(
+      "04 / RESEARCH"
+    );
+    expect(document.querySelector("#contact .eyebrow")?.textContent).toContain(
+      "05 / SAY HELLO"
+    );
+  });
+
+  it("publishes the complete personal motto with its editorial artwork", () => {
+    const motto =
+      "同志，你的磁场弱了?毛主席说过:在对的方向坚持长期主义，藐视一切暂时性困难，人生没有过不去的坎和战胜不了的困难，要像建设新中国一样建设自己。";
+    const section = document.querySelector("[data-motto]");
+    const picture = section?.querySelector("picture");
+
+    expect(section?.textContent).toContain("个人座右铭");
+    expect(section?.textContent).toContain("自我勉励");
+    expect(section?.textContent).toContain(motto);
+    expect(picture?.querySelector('source[type="image/avif"]')?.getAttribute("srcset")).toBe(
+      "/images/motto-mao.avif"
+    );
+    expect(picture?.querySelector('source[type="image/webp"]')?.getAttribute("srcset")).toBe(
+      "/images/motto-mao.webp"
+    );
+    expect(picture?.querySelector("img")?.getAttribute("src")).toBe(
+      "/images/motto-mao.jpg"
+    );
+    expect(picture?.querySelector("img")?.getAttribute("alt")).toContain(
+      "艺术形象"
+    );
+  });
+
   it("preserves public links and excludes the phone number", () => {
     const hrefs = [...document.querySelectorAll("a")].map((a) => a.href);
     expect(hrefs).toContain("https://hwang0310.dpdns.org/projects/income-forecast/");
@@ -64,6 +122,11 @@ describe("homepage content contract", () => {
       "0.45%",
       "报告自动化工作流",
       "基于三角函数基 RKDG 方法的误差分析",
+      "充分离散误差估计",
+      "负模估计",
+      "SIAC 后处理",
+      "线性对流方程",
+      "Burgers 方程",
       "北京大学重庆大数据研究院",
     ]) {
       expect(document.body.textContent).toContain(copy);
@@ -74,6 +137,28 @@ describe("homepage content contract", () => {
     expect(document.querySelector("#work")?.textContent).toContain(
       "合计偏差率约 0.45%"
     );
+  });
+
+  it("shows three explained numerical experiment exhibits from the thesis", () => {
+    const exhibits = [
+      ...document.querySelectorAll<HTMLElement>("#paper [data-thesis-experiment]"),
+    ];
+
+    expect(exhibits).toHaveLength(3);
+    expect(exhibits.map((exhibit) => exhibit.dataset.sourcePage)).toEqual([
+      "47",
+      "48",
+      "50-51",
+    ]);
+    for (const exhibit of exhibits) {
+      const image = exhibit.querySelector("img");
+      expect(image?.getAttribute("loading")).toBe("lazy");
+      expect(image?.hasAttribute("width")).toBe(true);
+      expect(image?.hasAttribute("height")).toBe(true);
+      expect(exhibit.querySelector("figcaption")?.textContent?.trim().length).toBeGreaterThan(
+        24
+      );
+    }
   });
 
   it("keeps the journey as a readable semantic ordered list without JavaScript", () => {
@@ -98,7 +183,7 @@ describe("homepage content contract", () => {
         ".mobile-portrait picture, [data-portrait-stage] picture, [data-about-portrait] picture"
       ),
     ];
-    expect(portraitPictures).toHaveLength(5);
+    expect(portraitPictures).toHaveLength(7);
     for (const picture of portraitPictures) {
       const image = picture.querySelector("img");
       expect(image?.hasAttribute("width")).toBe(true);
@@ -112,6 +197,8 @@ describe("homepage content contract", () => {
     expect(document.querySelector("[data-portrait-real] img")?.getAttribute("loading")).toBe(
       "lazy"
     );
+    expect(document.querySelectorAll("[data-portrait-switcher]")).toHaveLength(3);
+    expect(document.querySelectorAll("[data-portrait-toggle]")).toHaveLength(3);
   });
 
   it("provides AVIF, WebP, and JPEG fallbacks for every portrait picture", () => {

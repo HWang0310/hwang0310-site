@@ -8,6 +8,7 @@
       content="王昊的个人作品集：收入预测、数据治理、AI 自动化与计算数学研究。"
     />
     <meta name="theme-color" content="#fffdf6" />
+    <meta name="hwang0310-site" content="personal-homepage" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="zh_CN" />
     <meta property="og:title" content="王昊 · 数据分析、AI 应用与计算数学" />
@@ -64,9 +65,9 @@
           data-site-nav
         >
           <a href="#about">关于</a>
+          <a href="#journey">经历</a>
           <a href="#work">作品</a>
           <a href="#paper">论文</a>
-          <a href="#journey">经历</a>
           <a href="#contact">联系</a>
         </nav>
       </div>
@@ -91,7 +92,7 @@
             <button
               class="dog-guide mobile-dog-guide"
               type="button"
-              aria-label="小狗向导：前往作品"
+              aria-label="小狗向导：前往关于"
               data-dog-guide
               data-mobile-dog-guide="hero"
               hidden
@@ -105,22 +106,57 @@
                 data-dog-pose
                 data-pose="point"
               />
-              <span data-dog-guide-copy>往下走，作品在这里</span>
+              <span data-dog-guide-copy>先来认识一下</span>
             </button>
           </div>
 
-          <figure class="mobile-portrait">
-            <picture>
-              <source srcset="/images/portrait-mobile.avif" type="image/avif" />
-              <source srcset="/images/portrait-mobile.webp" type="image/webp" />
-              <img
-                src="/images/portrait-mobile.jpg"
-                width="900"
-                height="1600"
-                alt="王昊的暖色手绘风格肖像"
-                fetchpriority="high"
-              />
-            </picture>
+          <figure
+            class="mobile-portrait"
+            data-portrait-switcher
+            data-face="ai"
+          >
+            <div class="mobile-portrait-faces">
+              <picture
+                class="mobile-portrait-face"
+                data-portrait-ai
+                aria-hidden="false"
+              >
+                <source srcset="/images/portrait-mobile.avif" type="image/avif" />
+                <source srcset="/images/portrait-mobile.webp" type="image/webp" />
+                <img
+                  src="/images/portrait-mobile.jpg"
+                  width="900"
+                  height="1600"
+                  alt="王昊的暖色手绘风格肖像"
+                  fetchpriority="high"
+                />
+              </picture>
+              <picture
+                class="mobile-portrait-face mobile-portrait-real"
+                data-portrait-real
+                aria-hidden="true"
+              >
+                <source srcset="/images/portrait-real.avif" type="image/avif" />
+                <source srcset="/images/portrait-real.webp" type="image/webp" />
+                <img
+                  src="/images/portrait-real.jpg"
+                  width="1207"
+                  height="1600"
+                  alt="王昊的真实照片"
+                  loading="lazy"
+                />
+              </picture>
+            </div>
+            <button
+              class="portrait-toggle mobile-portrait-toggle"
+              type="button"
+              aria-label="查看真实照片"
+              aria-pressed="false"
+              data-portrait-toggle
+            >
+              <span class="portrait-toggle-icon" aria-hidden="true">↻</span>
+              <span>查看真实照片</span>
+            </button>
             <figcaption>你好，我是王昊。欢迎往下看看。</figcaption>
           </figure>
 
@@ -139,7 +175,7 @@
             <button
               class="dog-guide mobile-dog-guide"
               type="button"
-              aria-label="小狗向导：前往作品"
+              aria-label="小狗向导：前往经历"
               data-dog-guide
               data-mobile-dog-guide="about"
               hidden
@@ -153,7 +189,7 @@
                 data-dog-pose
                 data-pose="point"
               />
-              <span data-dog-guide-copy>往下走，作品在这里</span>
+              <span data-dog-guide-copy>沿着经历继续走</span>
             </button>
           </div>
 
@@ -184,6 +220,7 @@
             <div
               class="about-portrait-card"
               data-about-portrait
+              data-portrait-switcher
               data-face="ai"
             >
               <div class="about-portrait-faces">
@@ -254,10 +291,122 @@
           ></div>
         </section>
 
+        <aside class="motto chapter-bridge" data-motto aria-labelledby="motto-title">
+          <div class="motto-copy">
+            <p class="eyebrow">PERSONAL MOTTO · 自我勉励</p>
+            <h2 id="motto-title">个人座右铭</h2>
+            <blockquote>
+              <p>
+                同志，你的磁场弱了?毛主席说过:在对的方向坚持长期主义，藐视一切暂时性困难，人生没有过不去的坎和战胜不了的困难，要像建设新中国一样建设自己。
+              </p>
+            </blockquote>
+            <p class="motto-note">写给困难时刻的自己：方向正确，就把今天该做的事继续做好。</p>
+          </div>
+          <figure class="motto-art">
+            <picture>
+              <source srcset="/images/motto-mao.avif" type="image/avif" />
+              <source srcset="/images/motto-mao.webp" type="image/webp" />
+              <img
+                src="/images/motto-mao.jpg"
+                width="1200"
+                height="1500"
+                alt="座右铭配图：红旗场景中的青年毛泽东艺术形象"
+                loading="lazy"
+              />
+            </picture>
+            <figcaption>在对的方向，坚持长期主义。</figcaption>
+          </figure>
+        </aside>
+
+        <section id="journey" class="chapter journey" data-chapter="journey">
+          <div class="section-heading section-heading-row">
+            <div>
+              <p class="eyebrow">02 / JOURNEY</p>
+              <h2>一路把理论，<br />带到更真实的现场。</h2>
+            </div>
+            <p class="handwritten-note journey-note">每一步，都在扩大问题的尺度</p>
+            <button
+              class="dog-guide mobile-dog-guide"
+              type="button"
+              aria-label="小狗向导：查看下一段经历"
+              data-dog-guide
+              data-mobile-dog-guide="journey"
+              hidden
+            >
+              <img
+                src="/images/dog-run.webp"
+                width="320"
+                height="287"
+                alt="小狗沿着经历时间线奔跑"
+                loading="lazy"
+                data-dog-pose
+                data-pose="run"
+              />
+              <span data-dog-guide-copy>沿着经历继续走</span>
+            </button>
+          </div>
+
+          <div class="timeline-stage">
+            <ol class="timeline" aria-label="教育与职业经历">
+              <li data-timeline-entry tabindex="-1">
+                <time>2016–2020</time>
+                <div>
+                  <h3>中国地质大学（武汉）</h3>
+                  <p>信息与计算科学</p>
+                </div>
+              </li>
+              <li data-timeline-entry tabindex="-1">
+                <time>2020–2023</time>
+                <div>
+                  <h3>厦门大学</h3>
+                  <p>计算数学硕士</p>
+                </div>
+              </li>
+              <li data-timeline-entry tabindex="-1">
+                <time datetime="2022">2022</time>
+                <div>
+                  <h3>中元汇吉生物技术股份有限公司</h3>
+                  <p>分类算法实习</p>
+                </div>
+              </li>
+              <li data-timeline-entry tabindex="-1">
+                <time>2022–2023</time>
+                <div>
+                  <h3>北京大学重庆大数据研究院·数值计算实验室</h3>
+                  <p>自动驾驶算法实习</p>
+                </div>
+              </li>
+              <li data-timeline-entry tabindex="-1">
+                <time>2023–至今</time>
+                <div>
+                  <h3>中国电信湖北省分公司</h3>
+                  <p>数据分析师</p>
+                </div>
+              </li>
+            </ol>
+
+            <img
+              class="journey-dog"
+              src="/images/dog-run.webp"
+              width="320"
+              height="287"
+              alt=""
+              loading="lazy"
+              aria-hidden="true"
+            />
+            <div
+              class="doodle doodle-pawprints"
+              data-decoration="pawprints"
+              data-doodle
+              aria-hidden="true"
+            ></div>
+          </div>
+        </section>
+
         <section id="work" class="chapter work" data-chapter="work">
           <div class="section-heading section-heading-row">
             <div>
-              <p class="eyebrow">02 / SELECTED WORK</p>
+              <p class="eyebrow">03 / SELECTED WORK</p>
               <h2>让预测真正走进<br />每天的业务流程。</h2>
             </div>
             <p class="section-aside">
@@ -413,7 +562,7 @@
 
         <section id="paper" class="chapter paper" data-chapter="paper">
           <div class="section-heading">
-            <p class="eyebrow">03 / RESEARCH</p>
+            <p class="eyebrow">04 / RESEARCH</p>
             <h2>从证明“为什么”，<br />到解决“怎么办”。</h2>
             <button
               class="dog-guide mobile-dog-guide"
@@ -436,14 +585,16 @@
             </button>
           </div>
 
-          <article class="paper-card" aria-labelledby="paper-title">
+          <article class="paper-card paper-overview" aria-labelledby="paper-title">
             <div class="paper-number" aria-hidden="true">∫</div>
             <div class="paper-body">
               <p class="paper-meta">厦门大学计算数学硕士学位论文，2023 年</p>
               <h3 id="paper-title">基于三角函数基 RKDG 方法的误差分析</h3>
               <p>
-                研究三角函数基下的 RKDG 方法，并结合 SIAC
-                后处理讨论数值解的误差与超收敛性质。论文训练留下的不只是公式，更是一套从假设、推导到验证的严谨路径。
+                这篇论文研究以三角函数空间作为逼近空间的 Runge–Kutta
+                间断有限元方法，关注双曲守恒律数值解在“时间离散 + 空间离散”共同作用下究竟能达到怎样的精度。
+                核心不是只给出计算结果，而是建立从充分离散误差估计、负模估计到
+                SIAC 后处理超收敛分析的一条完整证据链。
               </p>
               <a
                 class="text-link"
@@ -455,90 +606,140 @@
               </a>
             </div>
           </article>
-        </section>
 
-        <section id="journey" class="chapter journey" data-chapter="journey">
-          <div class="section-heading section-heading-row">
-            <div>
-              <p class="eyebrow">04 / JOURNEY</p>
-              <h2>一路把理论，<br />带到更真实的现场。</h2>
-            </div>
-            <p class="handwritten-note journey-note">每一步，都在扩大问题的尺度</p>
-            <button
-              class="dog-guide mobile-dog-guide"
-              type="button"
-              aria-label="小狗向导：查看下一段经历"
-              data-dog-guide
-              data-mobile-dog-guide="journey"
-              hidden
-            >
-              <img
-                src="/images/dog-run.webp"
-                width="320"
-                height="287"
-                alt="小狗沿着经历时间线奔跑"
-                loading="lazy"
-                data-dog-pose
-                data-pose="run"
-              />
-              <span data-dog-guide-copy>沿着经历继续走</span>
-            </button>
+          <div class="research-path" aria-label="论文研究路径">
+            <article>
+              <span>01 / PROBLEM</span>
+              <h3>问题从哪里来</h3>
+              <p>
+                当传统多项式基被三角函数基替代，RKDG
+                方法已有的误差分析不能直接照搬，需要重新处理逼近空间、数值通量与时间推进之间的关系。
+              </p>
+            </article>
+            <article>
+              <span>02 / METHOD</span>
+              <h3>怎样建立证明</h3>
+              <p>
+                采用二阶显式 TVD Runge–Kutta 时间离散，在 CFL
+                条件和解足够光滑的前提下推导充分离散误差估计，再用负模估计刻画数值解中尚未显露的高阶信息。
+              </p>
+            </article>
+            <article>
+              <span>03 / RESULT</span>
+              <h3>怎样提取隐藏精度</h3>
+              <p>
+                以 B 样条卷积构造 SIAC 后处理。对线性双曲方程，理论表明后处理能够把负模中的高阶精度转化为可观测的超收敛结果。
+              </p>
+            </article>
           </div>
 
-          <div class="timeline-stage">
-            <ol class="timeline" aria-label="教育与职业经历">
-              <li data-timeline-entry tabindex="-1">
-                <time>2016–2020</time>
-                <div>
-                  <h3>中国地质大学（武汉）</h3>
-                  <p>信息与计算科学</p>
-                </div>
-              </li>
-              <li data-timeline-entry tabindex="-1">
-                <time>2020–2023</time>
-                <div>
-                  <h3>厦门大学</h3>
-                  <p>计算数学硕士</p>
-                </div>
-              </li>
-              <li data-timeline-entry tabindex="-1">
-                <time datetime="2022">2022</time>
-                <div>
-                  <h3>中元汇吉生物技术股份有限公司</h3>
-                  <p>分类算法实习</p>
-                </div>
-              </li>
-              <li data-timeline-entry tabindex="-1">
-                <time>2022–2023</time>
-                <div>
-                  <h3>北京大学重庆大数据研究院·数值计算实验室</h3>
-                  <p>自动驾驶算法实习</p>
-                </div>
-              </li>
-              <li data-timeline-entry tabindex="-1">
-                <time>2023–至今</time>
-                <div>
-                  <h3>中国电信湖北省分公司</h3>
-                  <p>数据分析师</p>
-                </div>
-              </li>
-            </ol>
+          <div class="experiment-intro">
+            <p class="paper-meta">CHAPTER 4 · NUMERICAL EXPERIMENTS</p>
+            <h3>让表格与曲线，回到理论结论旁边。</h3>
+            <p>
+              论文第 47–52 页分别检验线性对流方程和非线性 Burgers
+              方程。随着网格从 N=10 加密到 N=160，原始 DG
+              误差稳定下降；经过 SIAC 后处理后，误差量级进一步降低，实验阶与前文理论分析相互印证。
+            </p>
+          </div>
 
-            <img
-              class="journey-dog"
-              src="/images/dog-run.webp"
-              width="320"
-              height="287"
-              alt=""
-              loading="lazy"
-              aria-hidden="true"
-            />
-            <div
-              class="doodle doodle-pawprints"
-              data-decoration="pawprints"
-              data-doodle
-              aria-hidden="true"
-            ></div>
+          <div class="experiment-gallery">
+            <figure data-thesis-experiment data-source-page="47">
+              <a
+                href="/images/thesis-linear-convergence.jpg"
+                target="_blank"
+                rel="noopener"
+                aria-label="放大查看线性对流方程收敛表"
+              >
+                <picture>
+                  <source
+                    srcset="/images/thesis-linear-convergence.avif"
+                    type="image/avif"
+                  />
+                  <source
+                    srcset="/images/thesis-linear-convergence.webp"
+                    type="image/webp"
+                  />
+                  <img
+                    src="/images/thesis-linear-convergence.jpg"
+                    width="1042"
+                    height="1220"
+                    alt="论文第47页线性对流方程的DG与SIAC误差和收敛阶表格"
+                    loading="lazy"
+                  />
+                </picture>
+              </a>
+              <figcaption>
+                <span>PDF 第 47 页 · 表 4.1</span>
+                <strong>网格加密后，误差按稳定阶数下降</strong>
+                P1、P̃1、P2、P̃2 四组结果同时比较 DG 与 SIAC；高阶空间在后处理后呈现更明显的精度收益。
+              </figcaption>
+            </figure>
+
+            <figure data-thesis-experiment data-source-page="48">
+              <a
+                href="/images/thesis-linear-siac.jpg"
+                target="_blank"
+                rel="noopener"
+                aria-label="放大查看SIAC前后的线性对流误差曲线"
+              >
+                <picture>
+                  <source
+                    srcset="/images/thesis-linear-siac.avif"
+                    type="image/avif"
+                  />
+                  <source
+                    srcset="/images/thesis-linear-siac.webp"
+                    type="image/webp"
+                  />
+                  <img
+                    src="/images/thesis-linear-siac.jpg"
+                    width="1396"
+                    height="920"
+                    alt="论文第48页线性对流方程在SIAC处理前后的空间误差曲线"
+                    loading="lazy"
+                  />
+                </picture>
+              </a>
+              <figcaption>
+                <span>PDF 第 48 页 · 图 4.1</span>
+                <strong>SIAC 把振荡误差整理成更平滑的结构</strong>
+                左右两图对照原始 DG 解与后处理结果；不同网格曲线整体下移，直观呈现误差随加密而收缩。
+              </figcaption>
+            </figure>
+
+            <figure data-thesis-experiment data-source-page="50-51">
+              <a
+                href="/images/thesis-burgers.jpg"
+                target="_blank"
+                rel="noopener"
+                aria-label="放大查看Burgers方程收敛表和误差曲线"
+              >
+                <picture>
+                  <source
+                    srcset="/images/thesis-burgers.avif"
+                    type="image/avif"
+                  />
+                  <source
+                    srcset="/images/thesis-burgers.webp"
+                    type="image/webp"
+                  />
+                  <img
+                    src="/images/thesis-burgers.jpg"
+                    width="1600"
+                    height="840"
+                    alt="论文第50至51页Burgers方程的收敛表与SIAC处理前后误差曲线"
+                    loading="lazy"
+                  />
+                </picture>
+              </a>
+              <figcaption>
+                <span>PDF 第 50–51 页 · 表 4.2 / 图 4.5</span>
+                <strong>非线性 Burgers 方程也保持一致的收敛趋势</strong>
+                表格给出 t=0.05 时的误差与阶，曲线显示 SIAC
+                在非线性算例中仍能显著压低误差，说明方法并非只适用于线性模型。
+              </figcaption>
+            </figure>
           </div>
         </section>
 
@@ -610,31 +811,56 @@
       </div>
 
       <aside class="portrait-column" aria-label="王昊肖像与小狗向导">
-        <div class="portrait-sticky">
+        <div
+          class="portrait-sticky"
+          data-portrait-switcher
+          data-face="ai"
+        >
           <div class="portrait-frame" data-portrait-stage data-state="sage">
-            <picture class="portrait-layer portrait-layer-sage" data-portrait-sage>
-              <source srcset="/images/portrait-sage.avif" type="image/avif" />
-              <source srcset="/images/portrait-sage.webp" type="image/webp" />
-              <img
-                src="/images/portrait-sage.jpg"
-                width="900"
-                height="1600"
-                alt="王昊的鼠尾草绿色手绘风格肖像"
-                fetchpriority="high"
-              />
-            </picture>
+            <div
+              class="portrait-ai-layers"
+              data-portrait-ai
+              aria-hidden="false"
+            >
+              <picture class="portrait-layer portrait-layer-sage" data-portrait-sage>
+                <source srcset="/images/portrait-sage.avif" type="image/avif" />
+                <source srcset="/images/portrait-sage.webp" type="image/webp" />
+                <img
+                  src="/images/portrait-sage.jpg"
+                  width="900"
+                  height="1600"
+                  alt="王昊的鼠尾草绿色手绘风格肖像"
+                  fetchpriority="high"
+                />
+              </picture>
+              <picture
+                class="portrait-layer portrait-layer-warm"
+                data-portrait-warm
+                aria-hidden="true"
+              >
+                <source srcset="/images/portrait-warm.avif" type="image/avif" />
+                <source srcset="/images/portrait-warm.webp" type="image/webp" />
+                <img
+                  src="/images/portrait-warm.jpg"
+                  width="900"
+                  height="1600"
+                  alt=""
+                  loading="lazy"
+                />
+              </picture>
+            </div>
             <picture
-              class="portrait-layer portrait-layer-warm"
-              data-portrait-warm
+              class="portrait-layer portrait-layer-real"
+              data-portrait-real
               aria-hidden="true"
             >
-              <source srcset="/images/portrait-warm.avif" type="image/avif" />
-              <source srcset="/images/portrait-warm.webp" type="image/webp" />
+              <source srcset="/images/portrait-real.avif" type="image/avif" />
+              <source srcset="/images/portrait-real.webp" type="image/webp" />
               <img
-                src="/images/portrait-warm.jpg"
-                width="900"
+                src="/images/portrait-real.jpg"
+                width="1207"
                 height="1600"
-                alt=""
+                alt="王昊的真实照片"
                 loading="lazy"
               />
             </picture>
@@ -654,9 +880,20 @@
           </div>
 
           <button
+            class="portrait-toggle portrait-stage-toggle"
+            type="button"
+            aria-label="查看真实照片"
+            aria-pressed="false"
+            data-portrait-toggle
+          >
+            <span class="portrait-toggle-icon" aria-hidden="true">↻</span>
+            <span>查看真实照片</span>
+          </button>
+
+          <button
             class="dog-guide"
             type="button"
-            aria-label="小狗向导：前往作品"
+            aria-label="小狗向导：前往关于"
             data-dog-guide
           >
             <img
@@ -668,7 +905,7 @@
               data-dog-pose
               data-pose="point"
             />
-            <span data-dog-guide-copy>往下走，作品在这里</span>
+            <span data-dog-guide-copy>先来认识一下</span>
           </button>
         </div>
       </aside>

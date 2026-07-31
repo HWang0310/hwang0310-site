@@ -32,14 +32,15 @@ class ControlledImage {
 function createDocument(): Document {
   return new JSDOM(`
     <main id="top">
-      <section id="work"><a href="https://example.com/income">收入预估</a></section>
-      <section id="paper"><a href="/paper.pdf">论文</a></section>
+      <section id="about">关于</section>
       <section id="journey">
         <ol>
           <li data-timeline-entry tabindex="-1">第一段</li>
           <li data-timeline-entry tabindex="-1">第二段</li>
         </ol>
       </section>
+      <section id="work"><a href="https://example.com/income">收入预估</a></section>
+      <section id="paper"><a href="/paper.pdf">论文</a></section>
       <button data-dog-guide type="button"><img data-dog-pose data-pose="point" src="/images/dog-point.webp" alt="小狗指向下一段内容"><span data-dog-guide-copy>作品</span></button>
     </main>
   `).window.document;
@@ -151,7 +152,7 @@ describe("initDogGuide", () => {
     ({ reducedMotion, expectedBehavior }) => {
       const root = createDocument();
       const button = root.querySelector<HTMLButtonElement>("[data-dog-guide]")!;
-      const scrollOptions = recordScrollOptions(root.querySelector("#work")!);
+      const scrollOptions = recordScrollOptions(root.querySelector("#about")!);
       installMotionPreference(root, reducedMotion);
 
       initDogGuide(root);
@@ -167,11 +168,12 @@ describe("initDogGuide", () => {
   it("sets a chapter-specific accessible label and carries out each guide action", () => {
     const root = createDocument();
     const button = root.querySelector<HTMLButtonElement>("[data-dog-guide]")!;
+    const about = root.querySelector("#about")!;
     const work = root.querySelector("#work")!;
     const top = root.querySelector("#top")!;
     const firstJourneyEntry = root.querySelector<HTMLElement>("[data-timeline-entry]")!;
     const secondJourneyEntry = root.querySelectorAll<HTMLElement>("[data-timeline-entry]")[1]!;
-    const workScrolls = recordScroll(work);
+    const aboutScrolls = recordScroll(about);
     const topScrolls = recordScroll(top);
     const firstJourneyScrolls = recordScroll(firstJourneyEntry);
     const secondJourneyScrolls = recordScroll(secondJourneyEntry);
@@ -180,13 +182,13 @@ describe("initDogGuide", () => {
 
     setDogGuideChapter(root, "hero");
     button.click();
-    expect(button.getAttribute("aria-label")).toBe("小狗向导：前往作品");
-    expect(workScrolls()).toBe(1);
+    expect(button.getAttribute("aria-label")).toBe("小狗向导：前往关于");
+    expect(aboutScrolls()).toBe(1);
 
     setDogGuideChapter(root, "about");
     button.click();
-    expect(button.getAttribute("aria-label")).toBe("小狗向导：前往作品");
-    expect(workScrolls()).toBe(2);
+    expect(button.getAttribute("aria-label")).toBe("小狗向导：前往经历");
+    expect(firstJourneyScrolls()).toBe(1);
 
     setDogGuideChapter(root, "work");
     button.click();
@@ -203,7 +205,7 @@ describe("initDogGuide", () => {
     button.click();
     button.click();
     expect(button.getAttribute("aria-label")).toBe("小狗向导：查看下一段经历");
-    expect(firstJourneyScrolls()).toBe(2);
+    expect(firstJourneyScrolls()).toBe(3);
     expect(secondJourneyScrolls()).toBe(1);
     expect(root.activeElement).toBe(firstJourneyEntry);
 
@@ -216,7 +218,7 @@ describe("initDogGuide", () => {
   it("allows Space to activate the current guide action without page scrolling", () => {
     const root = createDocument();
     const button = root.querySelector<HTMLButtonElement>("[data-dog-guide]")!;
-    const workScrolls = recordScroll(root.querySelector("#work")!);
+    const aboutScrolls = recordScroll(root.querySelector("#about")!);
 
     initDogGuide(root);
     setDogGuideChapter(root, "hero");
@@ -228,19 +230,19 @@ describe("initDogGuide", () => {
     button.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
-    expect(workScrolls()).toBe(1);
+    expect(aboutScrolls()).toBe(1);
   });
 
   it("removes its listeners during cleanup", () => {
     const root = createDocument();
     const button = root.querySelector<HTMLButtonElement>("[data-dog-guide]")!;
-    const workScrolls = recordScroll(root.querySelector("#work")!);
+    const aboutScrolls = recordScroll(root.querySelector("#about")!);
     const cleanup = initDogGuide(root);
 
     cleanup();
     button.click();
 
-    expect(workScrolls()).toBe(0);
+    expect(aboutScrolls()).toBe(0);
   });
 
   it("restores every dog image attribute captured before chapter pose updates", () => {

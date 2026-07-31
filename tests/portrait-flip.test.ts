@@ -4,13 +4,23 @@ import { initPortraitFlip } from "../src/portrait-flip";
 
 function createDocument(): Document {
   return new JSDOM(`
-    <article data-about-portrait data-face="ai">
-      <picture data-portrait-ai aria-hidden="false"><img alt="AI 肖像" /></picture>
+    <article data-portrait-switcher data-face="ai">
+      <div data-portrait-ai aria-hidden="false">
+        <picture><img alt="AI 肖像一" /></picture>
+        <picture><img alt="AI 肖像二" /></picture>
+      </div>
       <picture data-portrait-real aria-hidden="true"><img alt="真实照片" /></picture>
       <button type="button" aria-pressed="false" data-portrait-toggle>
         <span>查看真实照片</span>
       </button>
     </article>
+    <figure data-portrait-switcher data-face="ai">
+      <picture data-portrait-ai aria-hidden="false"><img alt="移动端 AI 肖像" /></picture>
+      <picture data-portrait-real aria-hidden="true"><img alt="移动端真实照片" /></picture>
+      <button type="button" aria-pressed="false" data-portrait-toggle>
+        <span>查看真实照片</span>
+      </button>
+    </figure>
   `).window.document;
 }
 
@@ -18,7 +28,7 @@ describe("initPortraitFlip", () => {
   it("switches the portrait, pressed state, and button text", () => {
     const root = createDocument();
     const button = root.querySelector<HTMLButtonElement>("[data-portrait-toggle]")!;
-    const card = root.querySelector<HTMLElement>("[data-about-portrait]")!;
+    const card = root.querySelector<HTMLElement>("[data-portrait-switcher]")!;
 
     initPortraitFlip(root);
     button.click();
@@ -38,7 +48,7 @@ describe("initPortraitFlip", () => {
   it("uses Space without scrolling and toggles only once", () => {
     const root = createDocument();
     const button = root.querySelector<HTMLButtonElement>("[data-portrait-toggle]")!;
-    const card = root.querySelector<HTMLElement>("[data-about-portrait]")!;
+    const card = root.querySelector<HTMLElement>("[data-portrait-switcher]")!;
 
     initPortraitFlip(root);
     const event = new root.defaultView!.KeyboardEvent("keydown", {
@@ -56,7 +66,7 @@ describe("initPortraitFlip", () => {
   it("removes its listener during cleanup", () => {
     const root = createDocument();
     const button = root.querySelector<HTMLButtonElement>("[data-portrait-toggle]")!;
-    const card = root.querySelector<HTMLElement>("[data-about-portrait]")!;
+    const card = root.querySelector<HTMLElement>("[data-portrait-switcher]")!;
     const cleanup = initPortraitFlip(root);
 
     cleanup();
@@ -70,5 +80,19 @@ describe("initPortraitFlip", () => {
     const root = new JSDOM("<main></main>").window.document;
 
     expect(() => initPortraitFlip(root)).not.toThrow();
+  });
+
+  it("keeps multiple switchers independent", () => {
+    const root = createDocument();
+    const buttons = root.querySelectorAll<HTMLButtonElement>("[data-portrait-toggle]");
+    const cards = root.querySelectorAll<HTMLElement>("[data-portrait-switcher]");
+
+    initPortraitFlip(root);
+    buttons[1]?.click();
+
+    expect(cards[0]?.dataset.face).toBe("ai");
+    expect(cards[1]?.dataset.face).toBe("real");
+    expect(buttons[0]?.getAttribute("aria-pressed")).toBe("false");
+    expect(buttons[1]?.getAttribute("aria-pressed")).toBe("true");
   });
 });
