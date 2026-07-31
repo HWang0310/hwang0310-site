@@ -1,0 +1,24 @@
+{
+  "name": "hwang0310-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "create:og": "node scripts/create-og-image.mjs",
+    "build": "node scripts/build-site.mjs",
+    "preview": "vite preview",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.62.0",
+    "@types/node": "^26.1.2",
+    "jsdom": "^26.1.0",
+    "sharp": "^0.35.3",
+    "typescript": "^7.0.2",
+    "vite": "^6.4.3",
+    "vitest": "^4.1.10"
+  }
+}

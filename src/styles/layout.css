@@ -1,0 +1,233 @@
+.site-header {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  border-bottom: 1px solid rgba(39, 48, 41, 0.1);
+  background: rgba(255, 253, 246, 0.88);
+  backdrop-filter: blur(16px);
+}
+
+.nav-shell,
+.site-main {
+  width: min(calc(100% - 2rem), var(--content-max));
+  margin-inline: auto;
+}
+
+.nav-shell {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.site-main {
+  position: relative;
+}
+
+.content-column {
+  min-width: 0;
+}
+
+.chapter {
+  position: relative;
+  padding-block: var(--space-section);
+  scroll-margin-top: 5rem;
+}
+
+.hero {
+  display: grid;
+  min-height: calc(100svh - 72px);
+  align-content: center;
+  padding-top: clamp(4.5rem, 11vw, 8rem);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+}
+
+.hero-intro {
+  max-width: 40rem;
+  margin-top: var(--space-lg);
+  color: var(--color-ink-soft);
+  font-size: clamp(1.08rem, 1.65vw, 1.3rem);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-xl);
+}
+
+.mobile-portrait {
+  position: relative;
+  max-width: 26rem;
+  margin: var(--space-xl) auto 0;
+}
+
+.mobile-portrait picture {
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-large);
+  background: var(--color-sage);
+  box-shadow: 9px 9px 0 var(--color-apricot);
+}
+
+.mobile-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+}
+
+.mobile-portrait figcaption {
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  margin: -1.4rem auto 0;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--color-ink);
+  border-radius: 999px;
+  background: var(--color-cream);
+  font-family: var(--font-hand);
+  font-size: 0.9rem;
+  text-align: center;
+  transform: rotate(-2deg);
+}
+
+.section-heading {
+  max-width: 48rem;
+  margin-bottom: clamp(2.5rem, 6vw, 4.5rem);
+}
+
+.section-heading-row {
+  display: grid;
+  gap: var(--space-lg);
+  max-width: none;
+}
+
+.section-aside {
+  max-width: 24rem;
+  align-self: end;
+  color: var(--color-ink-soft);
+}
+
+.about-grid {
+  display: grid;
+  gap: var(--space-xl);
+}
+
+.work {
+  padding-top: calc(var(--space-section) * 1.08);
+}
+
+.portrait-column {
+  display: none;
+}
+
+.site-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-xl) 0 0;
+}
+
+.site-footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+}
+
+.site-footer a {
+  color: var(--color-bluegreen-dark);
+  font-weight: 700;
+}
+
+@media (min-width: 700px) {
+  .nav-shell,
+  .site-main {
+    width: min(calc(100% - 4rem), var(--content-max));
+  }
+
+  .section-heading-row {
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.46fr);
+  }
+
+  .about-grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(15rem, 0.76fr);
+    align-items: center;
+  }
+
+  .site-footer {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+@media (min-width: 960px) {
+  .nav-shell,
+  .site-main {
+    width: min(calc(100% - 5rem), var(--content-max));
+  }
+
+  .site-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.16fr) minmax(21rem, 0.84fr);
+    gap: clamp(3rem, 6vw, 6.25rem);
+    align-items: start;
+  }
+
+  .content-column {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .portrait-column {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: stretch;
+  }
+
+  .portrait-sticky {
+    position: sticky;
+    top: 104px;
+    height: calc(100svh - 130px);
+    min-height: 35rem;
+    max-height: 48rem;
+  }
+
+  .mobile-portrait {
+    display: none;
+  }
+
+  .hero {
+    min-height: calc(100svh - 72px);
+  }
+
+  .chapter:not(.hero) {
+    min-height: 85svh;
+  }
+}
+
+@media (max-width: 699px) {
+  .chapter {
+    padding-block: clamp(4.5rem, 18vw, 6.25rem);
+  }
+
+  .hero {
+    padding-top: 3.75rem;
+  }
+
+  .hero h1 br,
+  .section-heading h2 br {
+    display: none;
+  }
+
+  .hero-actions .button {
+    flex: 1 1 9.5rem;
+  }
+}

@@ -1,0 +1,106 @@
+.button,
+.site-nav a,
+.portrait-toggle,
+.dog-guide,
+.about-portrait-face {
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    opacity var(--motion-medium) ease,
+    visibility var(--motion-medium) ease,
+    transform var(--motion-medium) var(--ease-out),
+    box-shadow var(--motion-medium) var(--ease-out);
+}
+
+.portrait-layer {
+  transition:
+    opacity var(--motion-slow) var(--ease-out),
+    transform var(--motion-slow) var(--ease-out);
+}
+
+html[data-enhanced="true"] [data-portrait-stage][data-state="sage"] [data-portrait-sage],
+html[data-enhanced="true"] [data-portrait-stage][data-state="warm"] [data-portrait-warm] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+html[data-enhanced="true"] [data-portrait-stage][data-state="sage"] [data-portrait-warm],
+html[data-enhanced="true"] [data-portrait-stage][data-state="warm"] [data-portrait-sage] {
+  opacity: 0;
+  transform: translateY(0.5rem);
+}
+
+html[data-enhanced="true"] [data-doodle] {
+  transition: transform var(--motion-slow) var(--ease-out);
+}
+
+html[data-enhanced="true"][data-active-chapter="hero"] .doodle-chalk-hero {
+  transform: translateY(-8px) rotate(-10deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="about"] .doodle-star-about {
+  transform: translateY(7px) rotate(18deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="work"] .doodle-arrow-work {
+  transform: translateY(-10px) rotate(35deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="journey"] .doodle-pawprints {
+  transform: translateY(6px) rotate(-8deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="hero"] .doodle-star-stage {
+  transform: translateY(-4px) rotate(17deg);
+}
+
+html[data-enhanced="true"][data-active-chapter="work"] .doodle-arrow-stage {
+  transform: translateY(8px) rotate(125deg);
+}
+
+@media (hover: hover) {
+  .button:hover {
+    transform: translate(-2px, -2px);
+  }
+
+  .button-primary:hover,
+  .button-light:hover {
+    box-shadow: 7px 7px 0 var(--color-apricot);
+  }
+
+  .button-secondary:hover {
+    background: var(--color-paper);
+  }
+
+  .portrait-toggle:hover {
+    background: rgba(184, 215, 172, 0.45);
+  }
+
+  .dog-guide:hover {
+    transform: translateY(-4px) rotate(1deg);
+  }
+}
+
+@media (max-width: 959px) {
+  .mobile-dog-guide,
+  .mobile-dog-guide:hover {
+    transform: none;
+    transition: opacity var(--motion-medium) ease;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
