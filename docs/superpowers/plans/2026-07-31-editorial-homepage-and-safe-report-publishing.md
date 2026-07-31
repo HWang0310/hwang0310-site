@@ -40,8 +40,8 @@
 
 ## 5. 同步 Skill 三份交付
 
-- 从主库同步到 `/Users/hwang/Movies/SKILLS/income-forecast-2-0`。
-- 重新生成 `/Users/hwang/Movies/SKILLS/income-forecast-2-0.zip`。
+- 从主库同步到 `<HOME>/Movies/SKILLS/income-forecast-2-0`。
+- 重新生成 `<HOME>/Movies/SKILLS/income-forecast-2-0.zip`。
 - 排除 `.git`、`.wrangler`、缓存、凭据、用户源数据和测试产物。
 - 比较主库、移植副本和 ZIP 的文件清单与 SHA-256。
 

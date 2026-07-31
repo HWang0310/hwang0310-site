@@ -3,6 +3,7 @@ import {
   mkdtemp,
   rm,
 } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -74,10 +75,23 @@ export async function buildSite(options = {}) {
         options.archiveFile ?? join(projectDir, "data/report-archive.json"),
       reportRoot:
         options.reportRoot ??
-        "/Users/hwang/Music/收入预估/收入预估2026/收入预估202607",
+        process.env.INCOME_FORECAST_REPORT_ROOT ??
+        join(
+          homedir(),
+          "Music",
+          "收入预估",
+          "收入预估2026",
+          "收入预估202607"
+        ),
       thesisFile:
         options.thesisFile ??
-        "/Users/hwang/Pictures/厦大毕业相关/厦大毕业论文（终版）-王昊.pdf",
+        process.env.HWANG_THESIS_FILE ??
+        join(
+          homedir(),
+          "Pictures",
+          "厦大毕业相关",
+          "厦大毕业论文（终版）-王昊.pdf"
+        ),
       distDir: stagedDist,
     });
     await validateStaticTree(stagedDist);

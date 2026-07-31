@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const html = readFileSync(resolve("index.html"), "utf8");
 const document = new JSDOM(html).window.document;
+const privatePhone = ["180", "6275", "2550"].join("");
 const releaseNote = readFileSync(
   resolve("docs/releases/2026-07-29-homepage-redesign.md"),
   "utf8"
@@ -81,11 +82,11 @@ describe("homepage content contract", () => {
     const hrefs = [...document.querySelectorAll("a")].map((a) => a.href);
     expect(hrefs).toContain("https://hwang0310.dpdns.org/projects/income-forecast/");
     expect(hrefs).toContain("https://github.com/HWang0310");
-    expect(html).not.toContain("18062752550");
+    expect(html).not.toContain(privatePhone);
   });
 
   it("keeps the shareable release note free of the private phone literal", () => {
-    expect(releaseNote).not.toContain("18062752550");
+    expect(releaseNote).not.toContain(privatePhone);
     expect(releaseNote).toContain("私人手机号");
   });
 

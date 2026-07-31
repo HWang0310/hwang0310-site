@@ -12,6 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { constants } from "node:fs";
+import { homedir } from "node:os";
 import {
   basename,
   dirname,
@@ -36,9 +37,16 @@ const projectDirectory = dirname(scriptDirectory);
 const defaults = {
   archiveFile: join(projectDirectory, "data/report-archive.json"),
   reportRoot:
-    "/Users/hwang/Music/收入预估/收入预估2026/收入预估202607",
+    process.env.INCOME_FORECAST_REPORT_ROOT ??
+    join(homedir(), "Music", "收入预估", "收入预估2026", "收入预估202607"),
   thesisFile:
-    "/Users/hwang/Pictures/厦大毕业相关/厦大毕业论文（终版）-王昊.pdf",
+    process.env.HWANG_THESIS_FILE ??
+    join(
+      homedir(),
+      "Pictures",
+      "厦大毕业相关",
+      "厦大毕业论文（终版）-王昊.pdf"
+    ),
   distDir: join(projectDirectory, "dist"),
 };
 

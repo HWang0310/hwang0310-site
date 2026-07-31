@@ -15,7 +15,7 @@
 - 正式姓名显示为“王昊”，英文标识为“Hwang”。
 - 首屏标题固定为“把复杂问题，做成好用的答案。”
 - 不实现 3D、GLB、WebGL、视频背景、声音、登录、评论、CMS、博客或联系表单。
-- 不公开手机号 `18062752550`；公开邮箱仅为 `hwang0310@163.com`。
+- 不公开手机号 `<PRIVATE_PHONE>`；公开邮箱仅为 `hwang0310@163.com`。
 - 保留 `https://hwang0310.dpdns.org/projects/income-forecast/`。
 - 保留已发布报告日期 `20260720`、`20260724`、`20260725`、`20260726` 及其全部子资源。
 - 原硕士论文 PDF 公开发布，不删除封面学号和声明页。
@@ -102,7 +102,7 @@
 Run:
 
 ```bash
-cd /Users/hwang/Movies/Codex工作空间/hwang0310-site
+cd <HOME>/Movies/Codex工作空间/hwang0310-site
 npm init -y
 npm install -D vite typescript vitest jsdom @types/node sharp @playwright/test @axe-core/playwright
 ```
@@ -151,7 +151,7 @@ describe("homepage content contract", () => {
     const hrefs = [...document.querySelectorAll("a")].map((a) => a.href);
     expect(hrefs).toContain("https://hwang0310.dpdns.org/projects/income-forecast/");
     expect(hrefs).toContain("https://github.com/HWang0310");
-    expect(html).not.toContain("18062752550");
+    expect(html).not.toContain("<PRIVATE_PHONE>");
   });
 });
 ```
@@ -239,7 +239,7 @@ git commit -m "feat: scaffold accessible personal homepage"
 **Interfaces:**
 - Produces: `prepareAssets(options): Promise<string[]>`，其中 `options` 含六个源文件路径和一个输出目录。
 - Produces: 四个固定小狗姿态名 `inspect | point | run | rest`。
-- Consumes: 用户提供的三张 AI 肖像、`/Users/hwang/Pictures/IMG_7447.JPG`。
+- Consumes: 用户提供的三张 AI 肖像、`<HOME>/Pictures/IMG_7447.JPG`。
 
 - [ ] **Step 1: 检查四个源文件仍可读取**
 
@@ -249,7 +249,7 @@ Run:
 test -f '/var/folders/8s/_lxwv_9d2x3b0y2wwq2qjrp00000gn/T/codex-clipboard-c5efc6d7-a6fe-4325-9192-66fbfcf68144.png'
 test -f '/var/folders/8s/_lxwv_9d2x3b0y2wwq2qjrp00000gn/T/codex-clipboard-8e89fb7a-75b8-46e9-bd5e-e810d38e4e72.png'
 test -f '/var/folders/8s/_lxwv_9d2x3b0y2wwq2qjrp00000gn/T/codex-clipboard-a83c2fc7-5a89-4d85-b6d6-81926a98a465.png'
-test -f '/Users/hwang/Pictures/IMG_7447.JPG'
+test -f '<HOME>/Pictures/IMG_7447.JPG'
 ```
 
 Expected: 四条命令退出码均为 0。若任一临时肖像已消失，停止本任务并请用户重新附上对应图片；不得用真实照片或另一张肖像静默替代。
@@ -331,7 +331,7 @@ node scripts/prepare-assets.mjs \
   --portrait-sage '/var/folders/8s/_lxwv_9d2x3b0y2wwq2qjrp00000gn/T/codex-clipboard-c5efc6d7-a6fe-4325-9192-66fbfcf68144.png' \
   --portrait-warm '/var/folders/8s/_lxwv_9d2x3b0y2wwq2qjrp00000gn/T/codex-clipboard-8e89fb7a-75b8-46e9-bd5e-e810d38e4e72.png' \
   --portrait-mobile '/var/folders/8s/_lxwv_9d2x3b0y2wwq2qjrp00000gn/T/codex-clipboard-a83c2fc7-5a89-4d85-b6d6-81926a98a465.png' \
-  --portrait-real '/Users/hwang/Pictures/IMG_7447.JPG' \
+  --portrait-real '<HOME>/Pictures/IMG_7447.JPG' \
   --dog-sheet 'artwork/source/dog-guide-master.png' \
   --out-dir 'public/images'
 ```
@@ -769,8 +769,8 @@ git commit -m "feat: add dog guide chapter interactions"
 - Produces: `dist/projects/income-forecast/archive-manifest.js`。
 - Produces: `dist/projects/income-forecast/reports/YYYY/MM/DD/**`。
 - Produces: `dist/assets/papers/wang-hao-rkdg-thesis.pdf`。
-- Consumes: `/Users/hwang/Music/收入预估/收入预估2026/收入预估202607/`。
-- Consumes: `/Users/hwang/Pictures/厦大毕业相关/厦大毕业论文（终版）-王昊.pdf`。
+- Consumes: `<HOME>/Music/收入预估/收入预估2026/收入预估202607/`。
+- Consumes: `<HOME>/Pictures/厦大毕业相关/厦大毕业论文（终版）-王昊.pdf`。
 
 - [ ] **Step 1: 固定生产归档清单**
 
@@ -970,7 +970,7 @@ test -f dist/og.png
 test -f dist/assets/papers/wang-hao-rkdg-thesis.pdf
 test -f dist/projects/income-forecast/archive-manifest.js
 test -f dist/projects/income-forecast/reports/2026/07/26/index.html
-! rg -n '18062752550|file:///Users/' dist
+! rg -n '<PRIVATE_PHONE>|file:///Users/' dist
 ```
 
 Expected: 所有 `test` 成功，`rg` 无匹配。
