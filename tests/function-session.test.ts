@@ -102,6 +102,9 @@ function dependencies(overrides: Partial<SessionRouteDependencies> = {}) {
     now: () => new Date("2026-08-04T04:00:00.000Z"),
     monotonicNow: () => 0,
     sleep: async () => undefined,
+    defer: (promise) => {
+      void promise;
+    },
     findProfileByPhone: async () => profile,
     signInWithPassword: async () => loginResult,
     getSession: async () => null,

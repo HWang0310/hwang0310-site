@@ -325,24 +325,32 @@ export async function reserveLoginAttempt(
   now: Date,
 ): Promise<LoginLimitAdmission> {
   const reservationId = crypto.randomUUID();
-  const reservedTargets: LoginLimitTarget[] = [];
-  try {
-    for (const target of targets) {
-      const row = reservationRow(
+  const results = await Promise.allSettled(
+    targets.map(async (target) => ({
+      target,
+      row: reservationRow(
         await rpc.reserveRateLimitAttempt(
           reservationArgs(reservationId, target, now),
         ),
-      );
-      if (row.is_blocked) {
-        return {
-          admitted: false,
-          blockedScope: target.scope,
-          reservation: { id: reservationId, targets: [...reservedTargets] },
-        };
-      }
-      reservedTargets.push(target);
+      ),
+    })),
+  );
+  const reservedTargets: LoginLimitTarget[] = [];
+  let blockedScope: LoginLimitScope | undefined;
+  let hasError = false;
+  let firstError: unknown;
+  for (const result of results) {
+    if (result.status === "rejected") {
+      hasError = true;
+      firstError ??= result.reason;
+    } else if (result.value.row.is_blocked) {
+      blockedScope ??= result.value.target.scope;
+    } else {
+      reservedTargets.push(result.value.target);
     }
-  } catch (error) {
+  }
+
+  if (hasError) {
     if (reservedTargets.length > 0) {
       await Promise.allSettled(
         reservedTargets.map((target) =>
@@ -357,7 +365,14 @@ export async function reserveLoginAttempt(
         ),
       );
     }
-    throw error;
+    throw firstError ?? new HttpError(503, "限流服务暂不可用");
+  }
+  if (blockedScope !== undefined) {
+    return {
+      admitted: false,
+      blockedScope,
+      reservation: { id: reservationId, targets: [...reservedTargets] },
+    };
   }
   return {
     admitted: true,

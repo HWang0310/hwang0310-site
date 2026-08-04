@@ -72,6 +72,7 @@ export type SessionRouteDependencies = {
   now(): Date;
   monotonicNow(): number;
   sleep(milliseconds: number): Promise<void>;
+  defer(promise: Promise<void>): void;
   findProfileByPhone(phone: string): Promise<ProfileRecord | null>;
   signInWithPassword(input: {
     phone: string;
@@ -218,6 +219,7 @@ function responseForError(error: unknown, headers?: Headers): Response {
 function defaultDependencies(
   env: Env,
   config: ReturnType<typeof requireEnv>,
+  defer: SessionRouteDependencies["defer"],
 ): SessionRouteDependencies {
   const publicClient = createPublicSupabaseClient(config);
   const serviceClient = createServiceRoleSupabaseClient(config);
@@ -230,6 +232,7 @@ function defaultDependencies(
     monotonicNow: () => performance.now(),
     sleep: (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    defer,
 
     async findProfileByPhone(phone) {
       try {
@@ -366,12 +369,28 @@ async function delayedRateLimitedResponse(
   startedAt: number,
 ): Promise<Response> {
   await bestEffortRateLimitAudit(dependencies);
+  await applyMinimumFailurePadding(dependencies, startedAt);
+  return rateLimitedResponse();
+}
+
+async function applyMinimumFailurePadding(
+  dependencies: SessionRouteDependencies,
+  startedAt: number,
+): Promise<void> {
   const elapsed = dependencies.monotonicNow() - startedAt;
   const remaining = Number.isFinite(elapsed)
     ? Math.max(0, PUBLIC_RATE_LIMIT_MINIMUM_MILLISECONDS - elapsed)
     : PUBLIC_RATE_LIMIT_MINIMUM_MILLISECONDS;
   await dependencies.sleep(remaining);
-  return rateLimitedResponse();
+}
+
+async function delayedInvalidLoginResponse(
+  dependencies: SessionRouteDependencies,
+  startedAt: number,
+): Promise<Response> {
+  await auditFailedLogin(dependencies, "invalid_credentials");
+  await applyMinimumFailurePadding(dependencies, startedAt);
+  return responseForError(new HttpError(401, LOGIN_ERROR));
 }
 
 async function finalizeRejectedReservation(
@@ -412,13 +431,37 @@ async function maskBlockedRootAttempt(
     // The root admission decision is fixed; Auth availability must not reveal it.
   }
 
-  const work: Promise<unknown>[] = [
-    finalizeRejectedReservation(dependencies, reservation, "failure"),
-  ];
+  const finalization = finalizeRejectedReservation(
+    dependencies,
+    reservation,
+    "failure",
+  );
   if (login !== null) {
-    work.push(dependencies.revokeAccessToken(login.accessToken));
+    deferBestEffort(dependencies, () =>
+      dependencies.revokeAccessToken(login.accessToken),
+    );
   }
-  await Promise.allSettled(work);
+  await finalization;
+}
+
+function deferBestEffort(
+  dependencies: SessionRouteDependencies,
+  work: () => Promise<unknown>,
+): void {
+  let task: Promise<void>;
+  try {
+    task = work().then(
+      () => undefined,
+      () => undefined,
+    );
+  } catch {
+    return;
+  }
+  try {
+    dependencies.defer(task);
+  } catch {
+    void task;
+  }
 }
 
 async function postSession(
@@ -498,8 +541,7 @@ async function postSession(
     if (phoneFailureCount >= PUBLIC_RATE_LIMIT_FAILURE_THRESHOLD) {
       return delayedRateLimitedResponse(dependencies, responseStartedAt);
     }
-    await auditFailedLogin(dependencies, "invalid_credentials");
-    invalidLogin();
+    return delayedInvalidLoginResponse(dependencies, responseStartedAt);
   }
 
   const authRole = login.user.appMetadata.role;
@@ -530,8 +572,7 @@ async function postSession(
     if (phoneFailureCount >= PUBLIC_RATE_LIMIT_FAILURE_THRESHOLD) {
       return delayedRateLimitedResponse(dependencies, responseStartedAt);
     }
-    await auditFailedLogin(dependencies, "invalid_credentials");
-    invalidLogin();
+    return delayedInvalidLoginResponse(dependencies, responseStartedAt);
   }
 
   const cookies = buildSessionCookieHeaders({
@@ -607,6 +648,7 @@ export async function handleSessionRequest(
   request: Request,
   env: Env,
   injectedDependencies?: SessionRouteDependencies,
+  defer?: SessionRouteDependencies["defer"],
 ): Promise<Response> {
   const logoutHeaders =
     request.method.toUpperCase() === "DELETE" ? new Headers() : undefined;
@@ -616,7 +658,13 @@ export async function handleSessionRequest(
   try {
     const config = requireEnv(env);
     requireSameOrigin(request, config.siteOrigin);
-    const dependencies = injectedDependencies ?? defaultDependencies(env, config);
+    const dependencies =
+      injectedDependencies ??
+      defaultDependencies(
+        env,
+        config,
+        defer ?? ((promise) => void promise),
+      );
     switch (request.method.toUpperCase()) {
       case "GET":
         return await getCurrentSession(request, dependencies);
@@ -639,11 +687,26 @@ export async function handleSessionRequest(
   }
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) =>
-  handleSessionRequest(request, env);
+export const onRequestGet: PagesFunction<Env> = async (context) =>
+  handleSessionRequest(
+    context.request,
+    context.env,
+    undefined,
+    (promise) => context.waitUntil(promise),
+  );
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) =>
-  handleSessionRequest(request, env);
+export const onRequestPost: PagesFunction<Env> = async (context) =>
+  handleSessionRequest(
+    context.request,
+    context.env,
+    undefined,
+    (promise) => context.waitUntil(promise),
+  );
 
-export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) =>
-  handleSessionRequest(request, env);
+export const onRequestDelete: PagesFunction<Env> = async (context) =>
+  handleSessionRequest(
+    context.request,
+    context.env,
+    undefined,
+    (promise) => context.waitUntil(promise),
+  );
