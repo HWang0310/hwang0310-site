@@ -63,6 +63,7 @@ export type RateLimitFinalizeOutcome = "failure" | "release" | "success_clear";
 export type RateLimitFinalizeArgs = SharedRateLimitArgs & {
   p_reservation_id: string;
   p_outcome: RateLimitFinalizeOutcome;
+  p_max_failures: number;
 };
 
 export type RateLimitFinalizeRow = {
@@ -109,7 +110,11 @@ export type LoginLimitReservation = Readonly<{
 
 export type LoginLimitAdmission =
   | Readonly<{ admitted: true; reservation: LoginLimitReservation }>
-  | Readonly<{ admitted: false }>;
+  | Readonly<{
+      admitted: false;
+      blockedScope: LoginLimitScope;
+      reservation: LoginLimitReservation;
+    }>;
 
 function invalidClientAddress(): never {
   throw new HttpError(403, "无法验证请求来源");
@@ -273,7 +278,7 @@ function finalizedRow(
     response.error !== null ||
     response.data?.length !== 1 ||
     row === undefined ||
-    row.applied !== true ||
+    typeof row.applied !== "boolean" ||
     !Number.isInteger(row.failure_count) ||
     row.failure_count < 0 ||
     !Number.isInteger(row.pending_count) ||
@@ -299,6 +304,7 @@ async function finalizeTargets(
           p_limit_key: target.key,
           p_action: target.action,
           p_outcome: outcomeFor(target),
+          p_max_failures: target.rule.maxFailures,
           p_now: timestamp,
         }),
       );
@@ -328,15 +334,11 @@ export async function reserveLoginAttempt(
         ),
       );
       if (row.is_blocked) {
-        if (reservedTargets.length > 0) {
-          await finalizeTargets(
-            { id: reservationId, targets: reservedTargets },
-            rpc,
-            now,
-            () => "release",
-          );
-        }
-        return { admitted: false };
+        return {
+          admitted: false,
+          blockedScope: target.scope,
+          reservation: { id: reservationId, targets: [...reservedTargets] },
+        };
       }
       reservedTargets.push(target);
     }
@@ -349,6 +351,7 @@ export async function reserveLoginAttempt(
             p_limit_key: target.key,
             p_action: target.action,
             p_outcome: "release",
+            p_max_failures: target.rule.maxFailures,
             p_now: checkedNow(now),
           }),
         ),

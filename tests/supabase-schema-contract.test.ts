@@ -45,9 +45,10 @@ describe("income forecast access-control migration", () => {
     for (const required of [
       "pending_count integer not null default 0 check (pending_count >= 0)",
       "create function public.reserve_rate_limit_attempt(\n  p_reservation_id uuid,\n  p_limit_key text,\n  p_action text,\n  p_window_seconds integer,\n  p_max_failures integer,\n  p_block_seconds integer",
-      "create function public.finalize_rate_limit_attempt(\n  p_reservation_id uuid,\n  p_limit_key text,\n  p_action text,\n  p_outcome text",
+      "create function public.finalize_rate_limit_attempt(\n  p_reservation_id uuid,\n  p_limit_key text,\n  p_action text,\n  p_outcome text,\n  p_max_failures integer",
       "for update",
       "greatest(current_limit.pending_count - 1, 0)",
+      "grant select, insert, delete on table public.rate_limit_reservations to service_role",
       "with cleaned_reports as (",
       "visibility = 'private'\n      and status = 'online'\n      and not pinned",
     ]) {
@@ -56,6 +57,14 @@ describe("income forecast access-control migration", () => {
 
     expect(migration).not.toContain(
       "when current_limit.failure_count + 1 >= p_max_failures\n        then p_now + make_interval(secs => p_block_seconds)"
+    );
+    expect(migration).not.toContain(
+      "grant select, insert, update, delete on table public.rate_limit_reservations"
+    );
+    expect(migration.indexOf("if v_blocked_until > p_now then")).toBeLessThan(
+      migration.indexOf(
+        "v_window_started_at + make_interval(secs => p_window_seconds) <= p_now"
+      )
     );
 
     for (const required of [
@@ -67,6 +76,10 @@ describe("income forecast access-control migration", () => {
       "a second reservation at the boundary is blocked",
       "finalizing a reservation twice is idempotent",
       "stale finalization does not decrement the current window",
+      "an active block survives the original window boundary",
+      "releasing the admitted attempt clears its provisional block",
+      "a committed failure retains its concurrent block",
+      "a successful ip release clears its provisional block",
       "whole finalize_report_publish call rolls back",
     ]) {
       expect(pgTap).toContain(required);

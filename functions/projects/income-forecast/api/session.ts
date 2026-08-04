@@ -19,6 +19,7 @@ import {
   releaseLoginAttempt,
   requireCloudflareClientIp,
   reserveLoginAttempt,
+  type LoginLimitReservation,
   type RateLimitRpc,
   type RateLimitRpcClient,
 } from "../../../_lib/rate-limit";
@@ -43,6 +44,7 @@ const LOGIN_ERROR = "手机号或密码错误";
 const RATE_LIMIT_ERROR = "登录尝试过多，请稍后再试";
 const RATE_LIMIT_RETRY_AFTER_SECONDS = 300;
 const PUBLIC_RATE_LIMIT_FAILURE_THRESHOLD = 4;
+const PUBLIC_RATE_LIMIT_MINIMUM_MILLISECONDS = 800;
 const APP_ROLES: ReadonlySet<string> = new Set(["user", "admin", "root_admin"]);
 
 export type SessionResponse = {
@@ -68,6 +70,8 @@ export type LoginResult = {
 export type SessionRouteDependencies = {
   rateLimitRpc: RateLimitRpc;
   now(): Date;
+  monotonicNow(): number;
+  sleep(milliseconds: number): Promise<void>;
   findProfileByPhone(phone: string): Promise<ProfileRecord | null>;
   signInWithPassword(input: {
     phone: string;
@@ -223,6 +227,9 @@ function defaultDependencies(
   return {
     rateLimitRpc: createRateLimitRpc(rateLimitClient),
     now: () => new Date(),
+    monotonicNow: () => performance.now(),
+    sleep: (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)),
 
     async findProfileByPhone(phone) {
       try {
@@ -354,11 +361,72 @@ function rateLimitedResponse(): Response {
   );
 }
 
+async function delayedRateLimitedResponse(
+  dependencies: SessionRouteDependencies,
+  startedAt: number,
+): Promise<Response> {
+  await bestEffortRateLimitAudit(dependencies);
+  const elapsed = dependencies.monotonicNow() - startedAt;
+  const remaining = Number.isFinite(elapsed)
+    ? Math.max(0, PUBLIC_RATE_LIMIT_MINIMUM_MILLISECONDS - elapsed)
+    : PUBLIC_RATE_LIMIT_MINIMUM_MILLISECONDS;
+  await dependencies.sleep(remaining);
+  return rateLimitedResponse();
+}
+
+async function finalizeRejectedReservation(
+  dependencies: SessionRouteDependencies,
+  reservation: LoginLimitReservation,
+  outcome: "failure" | "release",
+): Promise<void> {
+  if (reservation.targets.length === 0) return;
+  try {
+    if (outcome === "failure") {
+      await finalizeLoginFailure(
+        reservation,
+        dependencies.rateLimitRpc,
+        dependencies.now(),
+      );
+    } else {
+      await releaseLoginAttempt(
+        reservation,
+        dependencies.rateLimitRpc,
+        dependencies.now(),
+      );
+    }
+  } catch {
+    // Admission is already denied; cleanup availability cannot change the 429.
+  }
+}
+
+async function maskBlockedRootAttempt(
+  phone: string,
+  password: string,
+  dependencies: SessionRouteDependencies,
+  reservation: LoginLimitReservation,
+): Promise<void> {
+  let login: LoginResult | null = null;
+  try {
+    login = await dependencies.signInWithPassword({ phone, password });
+  } catch {
+    // The root admission decision is fixed; Auth availability must not reveal it.
+  }
+
+  const work: Promise<unknown>[] = [
+    finalizeRejectedReservation(dependencies, reservation, "failure"),
+  ];
+  if (login !== null) {
+    work.push(dependencies.revokeAccessToken(login.accessToken));
+  }
+  await Promise.allSettled(work);
+}
+
 async function postSession(
   request: Request,
   config: ReturnType<typeof requireEnv>,
   dependencies: SessionRouteDependencies,
 ): Promise<Response> {
+  const responseStartedAt = dependencies.monotonicNow();
   requireCloudflareClientIp(request);
   const body = await loginBody(request);
   let phone: string;
@@ -390,8 +458,21 @@ async function postSession(
     now,
   );
   if (!admission.admitted) {
-    await bestEffortRateLimitAudit(dependencies);
-    return rateLimitedResponse();
+    if (admission.blockedScope === "rootAdmin") {
+      await maskBlockedRootAttempt(
+        phone,
+        body.password,
+        dependencies,
+        admission.reservation,
+      );
+    } else {
+      await finalizeRejectedReservation(
+        dependencies,
+        admission.reservation,
+        "release",
+      );
+    }
+    return delayedRateLimitedResponse(dependencies, responseStartedAt);
   }
 
   let login: LoginResult | null;
@@ -415,8 +496,7 @@ async function postSession(
       dependencies.now(),
     );
     if (phoneFailureCount >= PUBLIC_RATE_LIMIT_FAILURE_THRESHOLD) {
-      await bestEffortRateLimitAudit(dependencies);
-      return rateLimitedResponse();
+      return delayedRateLimitedResponse(dependencies, responseStartedAt);
     }
     await auditFailedLogin(dependencies, "invalid_credentials");
     invalidLogin();
@@ -448,8 +528,7 @@ async function postSession(
     }
     const phoneFailureCount = finalizationResult.value;
     if (phoneFailureCount >= PUBLIC_RATE_LIMIT_FAILURE_THRESHOLD) {
-      await bestEffortRateLimitAudit(dependencies);
-      return rateLimitedResponse();
+      return delayedRateLimitedResponse(dependencies, responseStartedAt);
     }
     await auditFailedLogin(dependencies, "invalid_credentials");
     invalidLogin();

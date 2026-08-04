@@ -100,6 +100,8 @@ function dependencies(overrides: Partial<SessionRouteDependencies> = {}) {
   const deps: SessionRouteDependencies = {
     rateLimitRpc: allowingRpc,
     now: () => new Date("2026-08-04T04:00:00.000Z"),
+    monotonicNow: () => 0,
+    sleep: async () => undefined,
     findProfileByPhone: async () => profile,
     signInWithPassword: async () => loginResult,
     getSession: async () => null,
@@ -312,12 +314,11 @@ describe("income forecast session route", () => {
     expect(body).not.toContain("private-refresh");
   });
 
-  it("checks DELETE origin before reading the session", async () => {
-    let sessionCalls = 0;
+  it("checks DELETE origin before revocation while still clearing both cookies", async () => {
+    let revokeCalls = 0;
     const setup = dependencies({
-      getSession: async () => {
-        sessionCalls += 1;
-        return null;
+      revokeSession: async () => {
+        revokeCalls += 1;
       },
     });
     const response = await handleSessionRequest(
@@ -330,7 +331,11 @@ describe("income forecast session route", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(sessionCalls).toBe(0);
+    expect(revokeCalls).toBe(0);
+    expect(response.headers.getSetCookie()).toEqual([
+      "if_access=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
+      "if_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
+    ]);
   });
 
   it("the token-safe revocation helper reports remote revocation failure without exposing tokens", async () => {

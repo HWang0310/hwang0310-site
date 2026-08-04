@@ -405,7 +405,12 @@ begin
     and current_limit.action = p_action
   for update;
 
-  if (v_blocked_until is not null and v_blocked_until <= p_now)
+  if v_blocked_until > p_now then
+    return query select false, true, v_blocked_until, v_failure_count;
+    return;
+  end if;
+
+  if v_blocked_until is not null
     or v_window_started_at + make_interval(secs => p_window_seconds) <= p_now
   then
     delete from public.rate_limit_reservations as reservation
@@ -437,11 +442,6 @@ begin
       and reservation.window_started_at = v_window_started_at
   ) then
     return query select true, false, null::timestamptz, v_failure_count;
-    return;
-  end if;
-
-  if v_blocked_until > p_now then
-    return query select false, true, v_blocked_until, v_failure_count;
     return;
   end if;
 
@@ -494,6 +494,7 @@ create function public.finalize_rate_limit_attempt(
   p_limit_key text,
   p_action text,
   p_outcome text,
+  p_max_failures integer,
   p_now timestamptz default now()
 )
 returns table (
@@ -517,6 +518,8 @@ begin
     or nullif(btrim(p_action), '') is null
     or p_outcome is null
     or p_outcome not in ('failure', 'release', 'success_clear')
+    or p_max_failures is null
+    or p_max_failures <= 0
     or p_now is null
   then
     raise exception using
@@ -567,6 +570,11 @@ begin
     end,
     blocked_until = case
       when p_outcome = 'success_clear' then null
+      when p_outcome = 'release'
+        and v_reservation_window = v_current_window
+        and current_limit.failure_count
+          + greatest(current_limit.pending_count - 1, 0) < p_max_failures
+        then null
       else current_limit.blocked_until
     end,
     updated_at = p_now
@@ -749,7 +757,7 @@ grant select, insert, update, delete on table public.profiles to service_role;
 grant select, insert, update, delete on table public.reports to service_role;
 grant select, insert on table public.audit_events to service_role;
 grant select, insert, update, delete on table public.rate_limits to service_role;
-grant select, insert, update, delete on table public.rate_limit_reservations to service_role;
+grant select, insert, delete on table public.rate_limit_reservations to service_role;
 
 revoke all on sequence public.audit_events_id_seq from public, anon, authenticated, service_role;
 grant usage, select on sequence public.audit_events_id_seq to service_role;
@@ -768,12 +776,12 @@ revoke all on function public.check_rate_limit(text, text, integer, integer, int
 revoke all on function public.record_rate_limit_failure(text, text, integer, integer, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.clear_rate_limit(text, text) from public, anon, authenticated, service_role;
 revoke all on function public.reserve_rate_limit_attempt(uuid, text, text, integer, integer, integer, timestamptz) from public, anon, authenticated, service_role;
-revoke all on function public.finalize_rate_limit_attempt(uuid, text, text, text, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.finalize_rate_limit_attempt(uuid, text, text, text, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.finalize_report_publish(date, text, uuid, text, bigint, integer, date[], uuid, timestamptz, jsonb) from public, anon, authenticated, service_role;
 
 grant execute on function public.check_rate_limit(text, text, integer, integer, integer, timestamptz) to service_role;
 grant execute on function public.record_rate_limit_failure(text, text, integer, integer, integer, timestamptz) to service_role;
 grant execute on function public.clear_rate_limit(text, text) to service_role;
 grant execute on function public.reserve_rate_limit_attempt(uuid, text, text, integer, integer, integer, timestamptz) to service_role;
-grant execute on function public.finalize_rate_limit_attempt(uuid, text, text, text, timestamptz) to service_role;
+grant execute on function public.finalize_rate_limit_attempt(uuid, text, text, text, integer, timestamptz) to service_role;
 grant execute on function public.finalize_report_publish(date, text, uuid, text, bigint, integer, date[], uuid, timestamptz, jsonb) to service_role;

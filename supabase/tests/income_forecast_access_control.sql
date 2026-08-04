@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(86);
+select plan(95);
 
 select has_table('public', 'profiles', 'profiles table exists');
 select has_table('public', 'reports', 'reports table exists');
@@ -90,10 +90,10 @@ select ok(
     cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
     where has_table_privilege(role_name, 'public.rate_limit_reservations', privilege_name)
   )
-  and (
-    select bool_and(has_table_privilege('service_role', 'public.rate_limit_reservations', privilege_name))
-    from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
-  ),
+  and has_table_privilege('service_role', 'public.rate_limit_reservations', 'SELECT')
+  and has_table_privilege('service_role', 'public.rate_limit_reservations', 'INSERT')
+  and not has_table_privilege('service_role', 'public.rate_limit_reservations', 'UPDATE')
+  and has_table_privilege('service_role', 'public.rate_limit_reservations', 'DELETE'),
   'rate_limit_reservations is available only to service_role'
 );
 
@@ -114,7 +114,7 @@ select ok(
   'reserve_rate_limit_attempt RPC exists'
 );
 select ok(
-  to_regprocedure('public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)') is not null,
+  to_regprocedure('public.finalize_rate_limit_attempt(uuid,text,text,text,integer,timestamp with time zone)') is not null,
   'finalize_rate_limit_attempt RPC exists'
 );
 select ok(
@@ -143,7 +143,7 @@ select is(
   'reserve_rate_limit_attempt uses security invoker'
 );
 select is(
-  (select prosecdef from pg_proc where oid = 'public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)'::regprocedure),
+  (select prosecdef from pg_proc where oid = 'public.finalize_rate_limit_attempt(uuid,text,text,text,integer,timestamp with time zone)'::regprocedure),
   false,
   'finalize_rate_limit_attempt uses security invoker'
 );
@@ -178,9 +178,9 @@ select ok(
   'only service_role can execute reserve_rate_limit_attempt'
 );
 select ok(
-  not has_function_privilege('anon', 'public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)', 'EXECUTE')
-  and not has_function_privilege('authenticated', 'public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)', 'EXECUTE')
-  and has_function_privilege('service_role', 'public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)', 'EXECUTE'),
+  not has_function_privilege('anon', 'public.finalize_rate_limit_attempt(uuid,text,text,text,integer,timestamp with time zone)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.finalize_rate_limit_attempt(uuid,text,text,text,integer,timestamp with time zone)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.finalize_rate_limit_attempt(uuid,text,text,text,integer,timestamp with time zone)', 'EXECUTE'),
   'only service_role can execute finalize_rate_limit_attempt'
 );
 select ok(
@@ -472,6 +472,7 @@ select results_eq(
       'atomic-phone-key',
       'login_phone',
       'failure',
+      10,
       timestamptz '2026-08-04 00:04:01+00'
     )
   $test$,
@@ -486,6 +487,7 @@ select results_eq(
       'atomic-phone-key',
       'login_phone',
       'failure',
+      10,
       timestamptz '2026-08-04 00:04:02+00'
     )
   $test$,
@@ -496,6 +498,153 @@ select ok(
   (select pending_count >= 0 from public.rate_limits
     where limit_key = 'atomic-phone-key' and action = 'login_phone'),
   'idempotent finalization never produces a negative pending count'
+);
+select ok(
+  (select is_blocked from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000006',
+    'atomic-phone-key',
+    'login_phone',
+    300,
+    10,
+    300,
+    timestamptz '2026-08-04 00:05:00+00'
+  )),
+  'an active block survives the original window boundary'
+);
+select is(
+  (select blocked_until from public.rate_limits
+    where limit_key = 'atomic-phone-key' and action = 'login_phone'),
+  timestamptz '2026-08-04 00:09:00+00',
+  'the active block deadline is not shortened by window expiry'
+);
+select ok(
+  (select is_reserved from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000007',
+    'atomic-phone-key',
+    'login_phone',
+    300,
+    10,
+    300,
+    timestamptz '2026-08-04 00:09:00+00'
+  )),
+  'the expired active block opens a fresh window at its deadline'
+);
+
+insert into public.rate_limits (
+  limit_key, action, window_started_at, failure_count, pending_count, blocked_until
+)
+values (
+  'release-phone-key', 'login_phone', timestamptz '2026-08-04 11:00:00+00', 9, 0, null
+);
+do $test$
+begin
+  perform * from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000008',
+    'release-phone-key', 'login_phone', 300, 10, 300,
+    timestamptz '2026-08-04 11:04:00+00'
+  );
+  perform * from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000009',
+    'release-phone-key', 'login_phone', 300, 10, 300,
+    timestamptz '2026-08-04 11:04:00+00'
+  );
+end;
+$test$;
+select results_eq(
+  $test$
+    select applied, failure_count, pending_count
+    from public.finalize_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000008',
+      'release-phone-key', 'login_phone', 'release', 10,
+      timestamptz '2026-08-04 11:04:01+00'
+    )
+  $test$,
+  $test$values (true, 9, 0)$test$,
+  'releasing the admitted attempt clears its provisional block'
+);
+select is(
+  (select blocked_until from public.rate_limits
+    where limit_key = 'release-phone-key' and action = 'login_phone'),
+  null::timestamptz,
+  'release removes a block supported only by a pending reservation'
+);
+
+insert into public.rate_limits (
+  limit_key, action, window_started_at, failure_count, pending_count, blocked_until
+)
+values (
+  'failure-phone-key', 'login_phone', timestamptz '2026-08-04 11:00:00+00', 9, 0, null
+);
+do $test$
+begin
+  perform * from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000010',
+    'failure-phone-key', 'login_phone', 300, 10, 300,
+    timestamptz '2026-08-04 11:04:00+00'
+  );
+  perform * from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000011',
+    'failure-phone-key', 'login_phone', 300, 10, 300,
+    timestamptz '2026-08-04 11:04:00+00'
+  );
+end;
+$test$;
+select results_eq(
+  $test$
+    select applied, failure_count, pending_count
+    from public.finalize_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000010',
+      'failure-phone-key', 'login_phone', 'failure', 10,
+      timestamptz '2026-08-04 11:04:01+00'
+    )
+  $test$,
+  $test$values (true, 10, 0)$test$,
+  'a committed failure retains its concurrent block'
+);
+select is(
+  (select blocked_until from public.rate_limits
+    where limit_key = 'failure-phone-key' and action = 'login_phone'),
+  timestamptz '2026-08-04 11:09:00+00',
+  'a failure-supported block remains active'
+);
+
+insert into public.rate_limits (
+  limit_key, action, window_started_at, failure_count, pending_count, blocked_until
+)
+values (
+  'release-ip-key', 'login_ip', timestamptz '2026-08-04 12:00:00+00', 19, 0, null
+);
+do $test$
+begin
+  perform * from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000012',
+    'release-ip-key', 'login_ip', 300, 20, 300,
+    timestamptz '2026-08-04 12:04:00+00'
+  );
+  perform * from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000013',
+    'release-ip-key', 'login_ip', 300, 20, 300,
+    timestamptz '2026-08-04 12:04:00+00'
+  );
+end;
+$test$;
+select results_eq(
+  $test$
+    select applied, failure_count, pending_count
+    from public.finalize_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000012',
+      'release-ip-key', 'login_ip', 'release', 20,
+      timestamptz '2026-08-04 12:04:01+00'
+    )
+  $test$,
+  $test$values (true, 19, 0)$test$,
+  'a successful IP release clears its provisional block'
+);
+select is(
+  (select blocked_until from public.rate_limits
+    where limit_key = 'release-ip-key' and action = 'login_ip'),
+  null::timestamptz,
+  'the successful IP keeps history without a provisional block'
 );
 
 select lives_ok(
@@ -529,6 +678,7 @@ select results_eq(
       'stale-phone-key',
       'login_phone',
       'release',
+      10,
       timestamptz '2026-08-04 10:06:01+00'
     )
   $test$,
@@ -543,6 +693,7 @@ select results_eq(
       'stale-phone-key',
       'login_phone',
       'release',
+      10,
       timestamptz '2026-08-04 10:06:02+00'
     )
   $test$,
@@ -751,6 +902,7 @@ select throws_like(
       'authenticated-key',
       'login_phone',
       'release',
+      10,
       timestamptz '2026-08-04 03:00:00+00'
     )
   $test$,

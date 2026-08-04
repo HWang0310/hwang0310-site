@@ -74,8 +74,17 @@ class InMemoryRateLimitRpc implements RateLimitRpc {
         blockedUntil: null,
       };
       this.limits.set(id, current);
+    } else if (current.blockedUntil !== null && current.blockedUntil > now) {
+      return rpcResponse<RateLimitReservationRow[]>([
+        {
+          is_reserved: false,
+          is_blocked: true,
+          blocked_until: new Date(current.blockedUntil).toISOString(),
+          failure_count: current.failureCount,
+        },
+      ]);
     } else if (
-      (current.blockedUntil !== null && current.blockedUntil <= now) ||
+      current.blockedUntil !== null ||
       current.windowStartedAt + args.p_window_seconds * 1_000 <= now
     ) {
       current.windowStartedAt = now;
@@ -87,16 +96,6 @@ class InMemoryRateLimitRpc implements RateLimitRpc {
       }
     }
 
-    if (current.blockedUntil !== null && current.blockedUntil > now) {
-      return rpcResponse<RateLimitReservationRow[]>([
-        {
-          is_reserved: false,
-          is_blocked: true,
-          blocked_until: new Date(current.blockedUntil).toISOString(),
-          failure_count: current.failureCount,
-        },
-      ]);
-    }
     if (current.failureCount + current.pendingCount >= args.p_max_failures) {
       current.blockedUntil = now + args.p_block_seconds * 1_000;
       return rpcResponse<RateLimitReservationRow[]>([
@@ -148,6 +147,12 @@ class InMemoryRateLimitRpc implements RateLimitRpc {
     if (args.p_outcome === "failure" && sameWindow) current.failureCount += 1;
     if (args.p_outcome === "success_clear") {
       current.failureCount = 0;
+      current.blockedUntil = null;
+    } else if (
+      args.p_outcome === "release" &&
+      sameWindow &&
+      current.failureCount + current.pendingCount < args.p_max_failures
+    ) {
       current.blockedUntil = null;
     }
     return rpcResponse<RateLimitFinalizeRow[]>([
@@ -249,10 +254,17 @@ function dependencies(
   },
 ) {
   let authCalls = 0;
+  let monotonicMilliseconds = 0;
+  const sleepCalls: number[] = [];
   const audits: AuditEventInput[] = [];
   const deps: SessionRouteDependencies = {
     rateLimitRpc: rpc,
     now: options.now,
+    monotonicNow: () => monotonicMilliseconds,
+    sleep: async (milliseconds) => {
+      sleepCalls.push(milliseconds);
+      monotonicMilliseconds += milliseconds;
+    },
     findProfileByPhone: async () => options.profile ?? null,
     signInWithPassword: async () => {
       authCalls += 1;
@@ -265,7 +277,7 @@ function dependencies(
       audits.push(event);
     },
   };
-  return { deps, audits, authCalls: () => authCalls };
+  return { deps, audits, authCalls: () => authCalls, sleepCalls };
 }
 
 async function post(request: Request, deps: SessionRouteDependencies) {
@@ -368,6 +380,28 @@ describe("exact login rate-limit boundaries", () => {
       pendingCount: 0,
       blockedUntil: Date.parse("2026-08-04T00:09:00.000Z"),
     });
+
+    now = new Date("2026-08-04T00:05:00.000Z");
+    const stillBlocked = await post(
+      failedLoginRequest("13800000000"),
+      setup.deps,
+    );
+    expect(stillBlocked.status).toBe(429);
+    expect(setup.authCalls()).toBe(10);
+    expect(
+      rpc.limits.get(`login_phone\n${phoneTarget.key}`)?.blockedUntil,
+    ).toBe(Date.parse("2026-08-04T00:09:00.000Z"));
+
+    now = new Date("2026-08-04T00:09:00.000Z");
+    const afterBlock = await post(failedLoginRequest("13800000000"), setup.deps);
+    expect(afterBlock.status).toBe(401);
+    expect(setup.authCalls()).toBe(11);
+    expect(rpc.limits.get(`login_phone\n${phoneTarget.key}`)).toMatchObject({
+      windowStartedAt: Date.parse("2026-08-04T00:09:00.000Z"),
+      failureCount: 1,
+      pendingCount: 0,
+      blockedUntil: null,
+    });
   });
 
   it("records the 20th shared-IP failure and blocks the 21st before Auth", async () => {
@@ -389,7 +423,7 @@ describe("exact login rate-limit boundaries", () => {
     expect(setup.authCalls()).toBe(20);
   });
 
-  it("records the 3rd trusted root-admin failure and blocks the 4th before Auth", async () => {
+  it("records the 3rd trusted root-admin failure and masks the 4th with one Auth call", async () => {
     const rpc = new InMemoryRateLimitRpc();
     let now = new Date("2026-08-04T02:00:00.000Z");
     const setup = dependencies(rpc, {
@@ -406,7 +440,7 @@ describe("exact login rate-limit boundaries", () => {
     now = new Date("2026-08-04T02:02:00.000Z");
     const blocked = await post(failedLoginRequest(rootProfile.phone), setup.deps);
     expect(blocked.status).toBe(429);
-    expect(setup.authCalls()).toBe(3);
+    expect(setup.authCalls()).toBe(4);
 
     const rootChecks = rpc.calls.filter(
       (call) =>
@@ -461,11 +495,11 @@ describe("exact login rate-limit boundaries", () => {
   });
 
   it.each([
-    ["phone", null, "13800000000", 9],
-    ["root admin", rootProfile, rootProfile.phone, 2],
+    ["phone", null, "13800000000", 9, 1],
+    ["root admin", rootProfile, rootProfile.phone, 2, 2],
   ] as const)(
-    "admits only one Auth call across a concurrent %s boundary",
-    async (_scope, profile, phone, priorFailures) => {
+    "preserves atomic admission and masking across a concurrent %s boundary",
+    async (_scope, profile, phone, priorFailures, expectedAuthCalls) => {
       const rpc = new InMemoryRateLimitRpc();
       const now = () => new Date("2026-08-04T05:00:00.000Z");
       const warmup = dependencies(rpc, { now, profile });
@@ -508,42 +542,66 @@ describe("exact login rate-limit boundaries", () => {
       await firstResponsePromise;
 
       expect(secondResponse.status).toBe(429);
-      expect(authCalls).toBe(1);
+      expect(authCalls).toBe(expectedAuthCalls);
       expect([...rpc.limits.values()].every((state) => state.pendingCount >= 0)).toBe(
         true,
       );
     },
   );
 
-  it("returns the same generic attempt-4 envelope for root, normal, and unknown phones", async () => {
-    const attemptFour = async (profile: ProfileRecord | null, phone: string) => {
+  it("equalizes attempt-4-and-later Auth, counters, delay, and envelopes", async () => {
+    const runSequence = async (profile: ProfileRecord | null, phone: string) => {
       const rpc = new InMemoryRateLimitRpc();
       const now = () => new Date("2026-08-04T06:00:00.000Z");
       const setup = dependencies(rpc, { now, profile });
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        await post(failedLoginRequest(phone), setup.deps);
+      const responses: Array<{
+        status: number;
+        retryAfter: string | null;
+        body: string;
+      }> = [];
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const response = await post(failedLoginRequest(phone), setup.deps);
+        responses.push({
+          status: response.status,
+          retryAfter: response.headers.get("Retry-After"),
+          body: await response.text(),
+        });
       }
-      const response = await post(failedLoginRequest(phone), setup.deps);
+      const states = Object.fromEntries(
+        [...rpc.limits.entries()].map(([id, state]) => [id.split("\n")[0], state]),
+      );
       return {
-        status: response.status,
-        retryAfter: response.headers.get("Retry-After"),
-        body: await response.text(),
+        responses,
         authCalls: setup.authCalls(),
+        sleepCalls: setup.sleepCalls,
+        phoneFailures: states.login_phone.failureCount,
+        ipFailures: states.login_ip.failureCount,
       };
     };
 
     const [root, normal, unknown] = await Promise.all([
-      attemptFour(rootProfile, rootProfile.phone),
-      attemptFour(userProfile, userProfile.phone),
-      attemptFour(null, "13800000003"),
+      runSequence(rootProfile, rootProfile.phone),
+      runSequence(userProfile, userProfile.phone),
+      runSequence(null, "13800000003"),
     ]);
 
-    expect(root).toMatchObject({ status: 429, retryAfter: "300", authCalls: 3 });
-    expect(normal).toMatchObject({ status: 429, retryAfter: "300", authCalls: 4 });
-    expect(unknown).toMatchObject({ status: 429, retryAfter: "300", authCalls: 4 });
-    expect(root.body).toBe(normal.body);
-    expect(normal.body).toBe(unknown.body);
-    expect(JSON.parse(root.body)).toEqual({
+    for (const result of [root, normal, unknown]) {
+      expect(result).toMatchObject({
+        authCalls: 5,
+        phoneFailures: 5,
+        ipFailures: 5,
+        sleepCalls: [800, 800],
+      });
+      expect(result.responses.map(({ status }) => status)).toEqual([
+        401, 401, 401, 429, 429,
+      ]);
+      expect(
+        result.responses.slice(3).map(({ retryAfter }) => retryAfter),
+      ).toEqual(["300", "300"]);
+    }
+    expect(root.responses).toEqual(normal.responses);
+    expect(normal.responses).toEqual(unknown.responses);
+    expect(JSON.parse(root.responses[3].body)).toEqual({
       error: "登录尝试过多，请稍后再试",
       retryAfterSeconds: 300,
     });
@@ -572,6 +630,7 @@ describe("exact login rate-limit boundaries", () => {
       (await post(failedLoginRequest(userProfile.phone), successful.deps)).status,
     ).toBe(200);
     expect(successful.authCalls()).toBe(1);
+    expect(successful.sleepCalls).toEqual([]);
   });
 
   it("keeps an already-decided 429 when its audit write fails", async () => {
@@ -589,7 +648,8 @@ describe("exact login rate-limit boundaries", () => {
     const response = await post(failedLoginRequest(rootProfile.phone), blocked.deps);
 
     expect(response.status).toBe(429);
-    expect(blocked.authCalls()).toBe(0);
+    expect(blocked.authCalls()).toBe(1);
+    expect(blocked.sleepCalls).toEqual([800]);
     expect(await response.json()).toEqual({
       error: "登录尝试过多，请稍后再试",
       retryAfterSeconds: 300,
@@ -613,6 +673,236 @@ describe("exact login rate-limit boundaries", () => {
       ),
     ).toBe(true);
     expect(rpc.reservations.size).toBe(0);
+  });
+
+  it("clears a provisional phone block when the admitted Auth call fails as a service error", async () => {
+    const rpc = new InMemoryRateLimitRpc();
+    const now = () => new Date("2026-08-04T07:40:00.000Z");
+    const warmup = dependencies(rpc, { now });
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      await post(failedLoginRequest("13800000000"), warmup.deps);
+    }
+
+    let signalAuthStarted!: () => void;
+    let releaseAuth!: () => void;
+    const authStarted = new Promise<void>((resolve) => {
+      signalAuthStarted = resolve;
+    });
+    const authBarrier = new Promise<void>((resolve) => {
+      releaseAuth = resolve;
+    });
+    const concurrent = dependencies(rpc, { now });
+    concurrent.deps.signInWithPassword = async () => {
+      signalAuthStarted();
+      await authBarrier;
+      throw new HttpError(503, "登录服务暂不可用");
+    };
+
+    const admittedPromise = post(failedLoginRequest("13800000000"), concurrent.deps);
+    await authStarted;
+    expect(
+      (await post(failedLoginRequest("13800000000"), concurrent.deps)).status,
+    ).toBe(429);
+    releaseAuth();
+    expect((await admittedPromise).status).toBe(503);
+
+    const phoneState = [...rpc.limits.entries()].find(([id]) =>
+      id.startsWith("login_phone\n"),
+    )?.[1];
+    expect(phoneState).toMatchObject({
+      failureCount: 9,
+      pendingCount: 0,
+      blockedUntil: null,
+    });
+  });
+
+  it("retains a provisional block when the admitted attempt finalizes as failure", async () => {
+    const rpc = new InMemoryRateLimitRpc();
+    const now = () => new Date("2026-08-04T07:50:00.000Z");
+    const warmup = dependencies(rpc, { now });
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      await post(failedLoginRequest("13800000000"), warmup.deps);
+    }
+
+    let signalAuthStarted!: () => void;
+    let releaseAuth!: () => void;
+    const authStarted = new Promise<void>((resolve) => {
+      signalAuthStarted = resolve;
+    });
+    const authBarrier = new Promise<void>((resolve) => {
+      releaseAuth = resolve;
+    });
+    const concurrent = dependencies(rpc, { now });
+    concurrent.deps.signInWithPassword = async () => {
+      signalAuthStarted();
+      await authBarrier;
+      return null;
+    };
+
+    const admittedPromise = post(failedLoginRequest("13800000000"), concurrent.deps);
+    await authStarted;
+    await post(failedLoginRequest("13800000000"), concurrent.deps);
+    releaseAuth();
+    await admittedPromise;
+
+    const phoneState = [...rpc.limits.entries()].find(([id]) =>
+      id.startsWith("login_phone\n"),
+    )?.[1];
+    expect(phoneState).toMatchObject({
+      failureCount: 10,
+      pendingCount: 0,
+      blockedUntil: Date.parse("2026-08-04T07:55:00.000Z"),
+    });
+  });
+
+  it("clears a provisional IP block when the admitted login succeeds", async () => {
+    const rpc = new InMemoryRateLimitRpc();
+    const now = () => new Date("2026-08-04T08:00:00.000Z");
+    const warmup = dependencies(rpc, { now });
+    for (let attempt = 0; attempt < 19; attempt += 1) {
+      await post(failedLoginRequest(String(13800000100 + attempt)), warmup.deps);
+    }
+
+    let signalAuthStarted!: () => void;
+    let releaseAuth!: () => void;
+    const authStarted = new Promise<void>((resolve) => {
+      signalAuthStarted = resolve;
+    });
+    const authBarrier = new Promise<void>((resolve) => {
+      releaseAuth = resolve;
+    });
+    const admitted = dependencies(rpc, {
+      now,
+      profile: userProfile,
+      login: {
+        user: { id: userProfile.userId, appMetadata: { role: "user" } },
+        accessToken: "access-value",
+        refreshToken: "refresh-value",
+      },
+    });
+    admitted.deps.signInWithPassword = async () => {
+      signalAuthStarted();
+      await authBarrier;
+      return {
+        user: { id: userProfile.userId, appMetadata: { role: "user" } },
+        accessToken: "access-value",
+        refreshToken: "refresh-value",
+      };
+    };
+
+    const admittedPromise = post(
+      failedLoginRequest(userProfile.phone),
+      admitted.deps,
+    );
+    await authStarted;
+    expect(
+      (await post(failedLoginRequest("13900000000"), admitted.deps)).status,
+    ).toBe(429);
+    releaseAuth();
+    expect((await admittedPromise).status).toBe(200);
+
+    const ipState = [...rpc.limits.entries()].find(([id]) =>
+      id.startsWith("login_ip\n"),
+    )?.[1];
+    expect(ipState).toMatchObject({
+      failureCount: 19,
+      pendingCount: 0,
+      blockedUntil: null,
+    });
+  });
+
+  it("accepts an idempotent applied:false finalize without revoking a successful login", async () => {
+    const setup = dependencies(new InMemoryRateLimitRpc(), {
+      now: () => new Date("2026-08-04T08:30:00.000Z"),
+      profile: userProfile,
+      login: {
+        user: { id: userProfile.userId, appMetadata: { role: "user" } },
+        accessToken: "access-value",
+        refreshToken: "refresh-value",
+      },
+    });
+    let revoked = 0;
+    setup.deps.rateLimitRpc = {
+      reserveRateLimitAttempt: async () =>
+        rpcResponse([
+          {
+            is_reserved: true,
+            is_blocked: false,
+            blocked_until: null,
+            failure_count: 0,
+          },
+        ]),
+      finalizeRateLimitAttempt: async () =>
+        rpcResponse([{ applied: false, failure_count: 0, pending_count: 0 }]),
+    };
+    setup.deps.revokeAccessToken = async () => {
+      revoked += 1;
+    };
+
+    const response = await post(failedLoginRequest(userProfile.phone), setup.deps);
+
+    expect(response.status).toBe(200);
+    expect(revoked).toBe(0);
+    expect(response.headers.getSetCookie()).toHaveLength(2);
+  });
+
+  it("masks a blocked root success, withholds cookies, and best-effort revokes its token", async () => {
+    const rpc = new InMemoryRateLimitRpc();
+    const now = () => new Date("2026-08-04T09:00:00.000Z");
+    const warmup = dependencies(rpc, { now, profile: rootProfile });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await post(failedLoginRequest(rootProfile.phone), warmup.deps);
+    }
+    const blocked = dependencies(rpc, {
+      now,
+      profile: rootProfile,
+      login: {
+        user: { id: rootProfile.userId, appMetadata: { role: "root_admin" } },
+        accessToken: "blocked-access-value",
+        refreshToken: "blocked-refresh-value",
+      },
+    });
+    let revoked = 0;
+    blocked.deps.revokeAccessToken = async (token) => {
+      expect(token).toBe("blocked-access-value");
+      revoked += 1;
+      throw new Error("revocation unavailable");
+    };
+
+    const response = await post(failedLoginRequest(rootProfile.phone), blocked.deps);
+
+    expect(response.status).toBe(429);
+    expect(blocked.authCalls()).toBe(1);
+    expect(revoked).toBe(1);
+    expect(response.headers.getSetCookie()).toEqual([]);
+    expect(blocked.sleepCalls).toEqual([800]);
+    expect(await response.text()).not.toContain("blocked-access-value");
+  });
+
+  it("keeps a blocked-root 429 when Auth itself is unavailable", async () => {
+    const rpc = new InMemoryRateLimitRpc();
+    const now = () => new Date("2026-08-04T09:30:00.000Z");
+    const warmup = dependencies(rpc, { now, profile: rootProfile });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await post(failedLoginRequest(rootProfile.phone), warmup.deps);
+    }
+    const blocked = dependencies(rpc, { now, profile: rootProfile });
+    let authCalls = 0;
+    blocked.deps.signInWithPassword = async () => {
+      authCalls += 1;
+      throw new HttpError(503, "登录服务暂不可用");
+    };
+
+    const response = await post(failedLoginRequest(rootProfile.phone), blocked.deps);
+
+    expect(response.status).toBe(429);
+    expect(authCalls).toBe(1);
+    expect(blocked.sleepCalls).toEqual([800]);
+    const states = Object.fromEntries(
+      [...rpc.limits.entries()].map(([id, state]) => [id.split("\n")[0], state]),
+    );
+    expect(states.login_phone.failureCount).toBe(4);
+    expect(states.login_ip.failureCount).toBe(4);
   });
 
   it("fails closed on a structurally invalid atomic reservation response", async () => {
