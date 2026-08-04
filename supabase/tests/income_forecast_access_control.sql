@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(65);
 
 select has_table('public', 'profiles', 'profiles table exists');
 select has_table('public', 'reports', 'reports table exists');
@@ -80,7 +80,7 @@ select ok(
 );
 
 select ok(
-  to_regprocedure('public.check_rate_limit(text,text,timestamp with time zone)') is not null,
+  to_regprocedure('public.check_rate_limit(text,text,integer,integer,integer,timestamp with time zone)') is not null,
   'check_rate_limit RPC exists'
 );
 select ok(
@@ -97,7 +97,7 @@ select ok(
 );
 
 select is(
-  (select prosecdef from pg_proc where oid = 'public.check_rate_limit(text,text,timestamp with time zone)'::regprocedure),
+  (select prosecdef from pg_proc where oid = 'public.check_rate_limit(text,text,integer,integer,integer,timestamp with time zone)'::regprocedure),
   false,
   'check_rate_limit uses security invoker'
 );
@@ -118,9 +118,9 @@ select is(
 );
 
 select ok(
-  not has_function_privilege('anon', 'public.check_rate_limit(text,text,timestamp with time zone)', 'EXECUTE')
-  and not has_function_privilege('authenticated', 'public.check_rate_limit(text,text,timestamp with time zone)', 'EXECUTE')
-  and has_function_privilege('service_role', 'public.check_rate_limit(text,text,timestamp with time zone)', 'EXECUTE'),
+  not has_function_privilege('anon', 'public.check_rate_limit(text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.check_rate_limit(text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.check_rate_limit(text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE'),
   'only service_role can execute check_rate_limit'
 );
 select ok(
@@ -140,6 +140,14 @@ select ok(
   and not has_function_privilege('authenticated', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE')
   and has_function_privilege('service_role', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE'),
   'only service_role can execute finalize_report_publish'
+);
+
+set local role service_role;
+
+select is(
+  current_user,
+  'service_role',
+  'behavior tests execute with the real service_role privileges and RLS bypass'
 );
 
 insert into public.reports (
@@ -214,24 +222,38 @@ end;
 $test$;
 
 select is(
-  (select is_blocked from public.check_rate_limit('phone-key', 'login_phone', timestamptz '2026-08-04 00:00:00+00')),
+  (select is_blocked from public.check_rate_limit(
+    'phone-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 00:00:00+00'
+  )),
   false,
   'phone is not blocked before the 10th failure'
 );
-select is(
-  (select failure_count from public.record_rate_limit_failure(
-    'phone-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 00:00:00+00'
-  )),
-  10,
-  'the 10th phone failure is recorded'
+select results_eq(
+  $test$
+    select failure_count, blocked_until, is_blocked
+    from public.record_rate_limit_failure(
+      'phone-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 00:00:00+00'
+    )
+  $test$,
+  $test$values (10, null::timestamptz, false)$test$,
+  'the 10th phone failure is recorded without starting the pause'
 );
 select is(
-  (select blocked_until from public.check_rate_limit('phone-key', 'login_phone', timestamptz '2026-08-04 00:00:00+00')),
-  timestamptz '2026-08-04 00:05:00+00',
-  'phone block lasts five minutes from the threshold failure'
+  (select blocked_until from public.rate_limits where limit_key = 'phone-key' and action = 'login_phone'),
+  null::timestamptz,
+  'the 10th phone failure does not start the pause'
+);
+select is(
+  (select blocked_until from public.check_rate_limit(
+    'phone-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 00:04:00+00'
+  )),
+  timestamptz '2026-08-04 00:09:00+00',
+  'the 11th phone attempt starts a complete five-minute pause'
 );
 select ok(
-  (select is_blocked from public.check_rate_limit('phone-key', 'login_phone', timestamptz '2026-08-04 00:00:01+00')),
+  (select is_blocked from public.check_rate_limit(
+    'phone-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 00:04:00+00'
+  )),
   'the 11th phone attempt is blocked before authentication'
 );
 
@@ -246,24 +268,38 @@ end;
 $test$;
 
 select is(
-  (select is_blocked from public.check_rate_limit('ip-key', 'login_ip', timestamptz '2026-08-04 01:00:00+00')),
+  (select is_blocked from public.check_rate_limit(
+    'ip-key', 'login_ip', 300, 20, 300, timestamptz '2026-08-04 01:00:00+00'
+  )),
   false,
   'IP is not blocked before the 20th failure'
 );
-select is(
-  (select failure_count from public.record_rate_limit_failure(
-    'ip-key', 'login_ip', 300, 20, 300, timestamptz '2026-08-04 01:00:00+00'
-  )),
-  20,
-  'the 20th IP failure is recorded'
+select results_eq(
+  $test$
+    select failure_count, blocked_until, is_blocked
+    from public.record_rate_limit_failure(
+      'ip-key', 'login_ip', 300, 20, 300, timestamptz '2026-08-04 01:00:00+00'
+    )
+  $test$,
+  $test$values (20, null::timestamptz, false)$test$,
+  'the 20th IP failure is recorded without starting the pause'
 );
 select is(
-  (select blocked_until from public.check_rate_limit('ip-key', 'login_ip', timestamptz '2026-08-04 01:00:00+00')),
-  timestamptz '2026-08-04 01:05:00+00',
-  'IP block lasts five minutes from the threshold failure'
+  (select blocked_until from public.rate_limits where limit_key = 'ip-key' and action = 'login_ip'),
+  null::timestamptz,
+  'the 20th IP failure does not start the pause'
+);
+select is(
+  (select blocked_until from public.check_rate_limit(
+    'ip-key', 'login_ip', 300, 20, 300, timestamptz '2026-08-04 01:03:00+00'
+  )),
+  timestamptz '2026-08-04 01:08:00+00',
+  'the 21st IP attempt starts a complete five-minute pause'
 );
 select ok(
-  (select is_blocked from public.check_rate_limit('ip-key', 'login_ip', timestamptz '2026-08-04 01:00:01+00')),
+  (select is_blocked from public.check_rate_limit(
+    'ip-key', 'login_ip', 300, 20, 300, timestamptz '2026-08-04 01:03:00+00'
+  )),
   'the 21st IP attempt is blocked before authentication'
 );
 
@@ -278,24 +314,38 @@ end;
 $test$;
 
 select is(
-  (select is_blocked from public.check_rate_limit('root-key', 'login_root_admin', timestamptz '2026-08-04 02:00:00+00')),
+  (select is_blocked from public.check_rate_limit(
+    'root-key', 'login_root_admin', 300, 3, 300, timestamptz '2026-08-04 02:00:00+00'
+  )),
   false,
   'root admin is not blocked before the 3rd failure'
 );
-select is(
-  (select failure_count from public.record_rate_limit_failure(
-    'root-key', 'login_root_admin', 300, 3, 300, timestamptz '2026-08-04 02:00:00+00'
-  )),
-  3,
-  'the 3rd root-admin failure is recorded'
+select results_eq(
+  $test$
+    select failure_count, blocked_until, is_blocked
+    from public.record_rate_limit_failure(
+      'root-key', 'login_root_admin', 300, 3, 300, timestamptz '2026-08-04 02:00:00+00'
+    )
+  $test$,
+  $test$values (3, null::timestamptz, false)$test$,
+  'the 3rd root-admin failure is recorded without starting the pause'
 );
 select is(
-  (select blocked_until from public.check_rate_limit('root-key', 'login_root_admin', timestamptz '2026-08-04 02:00:00+00')),
-  timestamptz '2026-08-04 02:05:00+00',
-  'root-admin block lasts five minutes from the threshold failure'
+  (select blocked_until from public.rate_limits where limit_key = 'root-key' and action = 'login_root_admin'),
+  null::timestamptz,
+  'the 3rd root-admin failure does not start the pause'
+);
+select is(
+  (select blocked_until from public.check_rate_limit(
+    'root-key', 'login_root_admin', 300, 3, 300, timestamptz '2026-08-04 02:02:00+00'
+  )),
+  timestamptz '2026-08-04 02:07:00+00',
+  'the 4th root-admin attempt starts a complete five-minute pause'
 );
 select ok(
-  (select is_blocked from public.check_rate_limit('root-key', 'login_root_admin', timestamptz '2026-08-04 02:00:01+00')),
+  (select is_blocked from public.check_rate_limit(
+    'root-key', 'login_root_admin', 300, 3, 300, timestamptz '2026-08-04 02:02:00+00'
+  )),
   'the 4th root-admin attempt is blocked before authentication'
 );
 
@@ -304,7 +354,9 @@ select lives_ok(
   'a successful login can clear its phone limit'
 );
 select is(
-  (select is_blocked from public.check_rate_limit('phone-key', 'login_phone', timestamptz '2026-08-04 00:00:01+00')),
+  (select is_blocked from public.check_rate_limit(
+    'phone-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 00:04:01+00'
+  )),
   false,
   'a cleared phone limit is no longer blocked'
 );
@@ -401,6 +453,100 @@ select is(
   (select count(*) from public.reports where report_date = date '2026-07-28'),
   0::bigint,
   'a rejected finalization does not activate the new report'
+);
+
+insert into public.reports (
+  report_date,
+  title,
+  release_id,
+  storage_prefix,
+  visibility,
+  pinned,
+  status,
+  size_bytes,
+  file_count,
+  published_at
+)
+values (
+  date '2026-07-28',
+  'Rollback cleanup candidate',
+  '00000000-0000-0000-0000-000000000128',
+  'reports/2026/07/28/00000000-0000-0000-0000-000000000128/',
+  'private',
+  false,
+  'online',
+  400,
+  5,
+  timestamptz '2026-07-28 08:00:00+00'
+);
+
+select throws_like(
+  $test$
+    select public.finalize_report_publish(
+      date '2026-07-29',
+      'Rolled-back private report',
+      '00000000-0000-0000-0000-000000000129',
+      'reports/2026/07/29/00000000-0000-0000-0000-000000000129/',
+      500,
+      6,
+      array[date '2026-07-28'],
+      'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      timestamptz '2026-07-29 08:00:00+00'
+    )
+  $test$,
+  '%audit_events_actor_user_id_fkey%',
+  'audit FK failure occurs after cleanup and activation work'
+);
+select is(
+  (select status::text from public.reports where report_date = date '2026-07-28'),
+  'online',
+  'whole finalize_report_publish call rolls back cleanup on audit failure'
+);
+select is(
+  (select count(*) from public.reports where report_date = date '2026-07-29'),
+  0::bigint,
+  'whole finalize_report_publish call rolls back activation on audit failure'
+);
+select is(
+  (select count(*) from public.audit_events where target_id = '2026-07-29'),
+  0::bigint,
+  'whole finalize_report_publish call leaves no audit row on audit failure'
+);
+
+reset role;
+
+set local role anon;
+
+select throws_like(
+  $test$
+    select * from public.check_rate_limit(
+      'anon-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 03:00:00+00'
+    )
+  $test$,
+  '%permission denied for function check_rate_limit%',
+  'anon cannot execute the security-invoker rate-limit RPC'
+);
+
+reset role;
+
+set local role authenticated;
+
+select throws_like(
+  $test$
+    select * from public.check_rate_limit(
+      'authenticated-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 03:00:00+00'
+    )
+  $test$,
+  '%permission denied for function check_rate_limit%',
+  'authenticated cannot execute the security-invoker rate-limit RPC'
+);
+
+reset role;
+
+select is(
+  current_user,
+  session_user,
+  'role tests safely restore the pgTAP owner role'
 );
 
 select * from finish();

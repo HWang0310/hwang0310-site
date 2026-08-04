@@ -140,6 +140,9 @@ for each row execute function public.protect_public_income_reports();
 create function public.check_rate_limit(
   p_limit_key text,
   p_action text,
+  p_window_seconds integer,
+  p_max_failures integer,
+  p_block_seconds integer,
   p_now timestamptz default now()
 )
 returns table (
@@ -147,19 +150,74 @@ returns table (
   blocked_until timestamptz,
   failure_count integer
 )
-language sql
-stable
+language plpgsql
+volatile
 security invoker
 set search_path = ''
 as $$
+begin
+  if nullif(btrim(p_limit_key), '') is null
+    or nullif(btrim(p_action), '') is null
+    or p_window_seconds is null
+    or p_window_seconds <= 0
+    or p_max_failures is null
+    or p_max_failures <= 0
+    or p_block_seconds is null
+    or p_block_seconds <= 0
+    or p_now is null
+  then
+    raise exception using
+      errcode = '22023',
+      message = 'rate limit parameters must be non-empty and positive';
+  end if;
+
+  return query
+  with checked_limit as (
+    update public.rate_limits as current_limit
+    set
+      window_started_at = case
+        when current_limit.blocked_until > p_now
+          then current_limit.window_started_at
+        when current_limit.blocked_until is not null
+          or current_limit.window_started_at
+            + make_interval(secs => p_window_seconds) <= p_now
+          then p_now
+        else current_limit.window_started_at
+      end,
+      failure_count = case
+        when current_limit.blocked_until > p_now
+          then current_limit.failure_count
+        when current_limit.blocked_until is not null
+          or current_limit.window_started_at
+            + make_interval(secs => p_window_seconds) <= p_now
+          then 0
+        else current_limit.failure_count
+      end,
+      blocked_until = case
+        when current_limit.blocked_until > p_now
+          then current_limit.blocked_until
+        when current_limit.blocked_until is not null
+          or current_limit.window_started_at
+            + make_interval(secs => p_window_seconds) <= p_now
+          then null
+        when current_limit.failure_count >= p_max_failures
+          then p_now + make_interval(secs => p_block_seconds)
+        else null
+      end,
+      updated_at = p_now
+    where current_limit.limit_key = p_limit_key
+      and current_limit.action = p_action
+    returning
+      current_limit.failure_count,
+      current_limit.blocked_until
+  )
   select
-    coalesce(rate_limit.blocked_until > p_now, false) as is_blocked,
-    rate_limit.blocked_until,
-    coalesce(rate_limit.failure_count, 0) as failure_count
+    coalesce(checked_limit.blocked_until > p_now, false),
+    checked_limit.blocked_until,
+    coalesce(checked_limit.failure_count, 0)
   from (values (1)) as singleton(value)
-  left join public.rate_limits as rate_limit
-    on rate_limit.limit_key = p_limit_key
-   and rate_limit.action = p_action;
+  left join checked_limit on true;
+end;
 $$;
 
 create function public.record_rate_limit_failure(
@@ -183,9 +241,13 @@ as $$
 begin
   if nullif(btrim(p_limit_key), '') is null
     or nullif(btrim(p_action), '') is null
+    or p_window_seconds is null
     or p_window_seconds <= 0
+    or p_max_failures is null
     or p_max_failures <= 0
+    or p_block_seconds is null
     or p_block_seconds <= 0
+    or p_now is null
   then
     raise exception using
       errcode = '22023',
@@ -206,46 +268,39 @@ begin
     p_action,
     p_now,
     1,
-    case
-      when p_max_failures = 1
-        then p_now + make_interval(secs => p_block_seconds)
-      else null
-    end,
+    null,
     p_now
   )
   on conflict (limit_key, action) do update
   set
     window_started_at = case
+      when current_limit.blocked_until is not null
+        and current_limit.blocked_until <= p_now
+        then p_now
       when current_limit.window_started_at
-        + make_interval(secs => p_window_seconds) <= p_now
+          + make_interval(secs => p_window_seconds) <= p_now
         then p_now
       else current_limit.window_started_at
     end,
     failure_count = case
+      when current_limit.blocked_until is not null
+        and current_limit.blocked_until <= p_now
+        then 1
       when current_limit.window_started_at
-        + make_interval(secs => p_window_seconds) <= p_now
+          + make_interval(secs => p_window_seconds) <= p_now
         then 1
       else current_limit.failure_count + 1
     end,
     blocked_until = case
       when current_limit.blocked_until > p_now
         then current_limit.blocked_until
-      when current_limit.window_started_at
-        + make_interval(secs => p_window_seconds) <= p_now
-        then case
-          when p_max_failures = 1
-            then p_now + make_interval(secs => p_block_seconds)
-          else null
-        end
-      when current_limit.failure_count + 1 >= p_max_failures
-        then p_now + make_interval(secs => p_block_seconds)
       else null
     end,
     updated_at = p_now
   returning
     current_limit.failure_count,
     current_limit.blocked_until,
-    current_limit.blocked_until > p_now;
+    coalesce(current_limit.blocked_until > p_now, false);
 end;
 $$;
 
@@ -284,7 +339,8 @@ set search_path = ''
 as $$
 declare
   v_cleaned_report_dates date[];
-  v_eligible_cleanup_count integer;
+  v_cleaned_report_count integer;
+  v_lock_date date;
   v_report public.reports;
 begin
   if p_report_date is null
@@ -317,31 +373,37 @@ begin
   into v_cleaned_report_dates
   from unnest(coalesce(p_cleaned_report_dates, '{}'::date[])) as requested(report_date);
 
-  perform 1
-  from public.reports
-  where report_date = any(array_append(v_cleaned_report_dates, p_report_date))
-  order by report_date
-  for update;
+  for v_lock_date in
+    select requested.report_date
+    from unnest(array_append(v_cleaned_report_dates, p_report_date)) as requested(report_date)
+    order by requested.report_date
+  loop
+    perform pg_advisory_xact_lock(
+      1229867334,
+      (v_lock_date - date '2000-01-01')::integer
+    );
+  end loop;
 
+  with cleaned_reports as (
+    update public.reports
+    set
+      status = 'offline',
+      cleaned_at = p_published_at
+    where report_date = any(v_cleaned_report_dates)
+      and visibility = 'private'
+      and status = 'online'
+      and not pinned
+    returning report_date
+  )
   select count(*)::integer
-  into v_eligible_cleanup_count
-  from public.reports
-  where report_date = any(v_cleaned_report_dates)
-    and visibility = 'private'
-    and status = 'online'
-    and not pinned;
+  into v_cleaned_report_count
+  from cleaned_reports;
 
-  if v_eligible_cleanup_count <> cardinality(v_cleaned_report_dates) then
+  if v_cleaned_report_count <> cardinality(v_cleaned_report_dates) then
     raise exception using
       errcode = '23514',
       message = 'all cleanup reports must be online, private, and unpinned';
   end if;
-
-  update public.reports
-  set
-    status = 'offline',
-    cleaned_at = p_published_at
-  where report_date = any(v_cleaned_report_dates);
 
   insert into public.reports (
     report_date,
@@ -439,12 +501,12 @@ grant usage on type public.report_status to service_role;
 
 revoke all on function public.set_income_forecast_updated_at() from public, anon, authenticated, service_role;
 revoke all on function public.protect_public_income_reports() from public, anon, authenticated, service_role;
-revoke all on function public.check_rate_limit(text, text, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.check_rate_limit(text, text, integer, integer, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.record_rate_limit_failure(text, text, integer, integer, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.clear_rate_limit(text, text) from public, anon, authenticated, service_role;
 revoke all on function public.finalize_report_publish(date, text, uuid, text, bigint, integer, date[], uuid, timestamptz, jsonb) from public, anon, authenticated, service_role;
 
-grant execute on function public.check_rate_limit(text, text, timestamptz) to service_role;
+grant execute on function public.check_rate_limit(text, text, integer, integer, integer, timestamptz) to service_role;
 grant execute on function public.record_rate_limit_failure(text, text, integer, integer, integer, timestamptz) to service_role;
 grant execute on function public.clear_rate_limit(text, text) to service_role;
 grant execute on function public.finalize_report_publish(date, text, uuid, text, bigint, integer, date[], uuid, timestamptz, jsonb) to service_role;
