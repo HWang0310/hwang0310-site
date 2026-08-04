@@ -587,6 +587,151 @@ begin
 end;
 $$;
 
+create function public.consume_password_recovery_attempt(
+  p_minute_key text,
+  p_hour_key text,
+  p_now timestamptz default now()
+)
+returns table (
+  is_allowed boolean,
+  retry_after_seconds integer,
+  minute_count integer,
+  hour_count integer
+)
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_minute_started_at timestamptz;
+  v_hour_started_at timestamptz;
+  v_minute_count integer;
+  v_hour_count integer;
+  v_retry_after integer;
+begin
+  if nullif(btrim(p_minute_key), '') is null
+    or nullif(btrim(p_hour_key), '') is null
+    or p_minute_key = p_hour_key
+    or p_now is null
+  then
+    raise exception using
+      errcode = '22023',
+      message = 'password recovery limit parameters must be valid';
+  end if;
+
+  insert into public.rate_limits (
+    limit_key,
+    action,
+    window_started_at,
+    failure_count,
+    pending_count,
+    blocked_until,
+    updated_at
+  )
+  values (
+    p_hour_key,
+    'password_forgot_hour',
+    p_now,
+    0,
+    0,
+    null,
+    p_now
+  )
+  on conflict (limit_key, action) do nothing;
+
+  select current_limit.window_started_at, current_limit.failure_count
+  into v_hour_started_at, v_hour_count
+  from public.rate_limits as current_limit
+  where current_limit.limit_key = p_hour_key
+    and current_limit.action = 'password_forgot_hour'
+  for update;
+
+  if v_hour_started_at + interval '1 hour' <= p_now then
+    v_hour_started_at := p_now;
+    v_hour_count := 0;
+  end if;
+  v_hour_count := least(v_hour_count + 1, 11);
+
+  update public.rate_limits as current_limit
+  set
+    window_started_at = v_hour_started_at,
+    failure_count = v_hour_count,
+    pending_count = 0,
+    blocked_until = null,
+    updated_at = p_now
+  where current_limit.limit_key = p_hour_key
+    and current_limit.action = 'password_forgot_hour';
+
+  if v_hour_count > 10 then
+    v_retry_after := greatest(
+      1,
+      ceil(extract(epoch from (
+        v_hour_started_at + interval '1 hour' - p_now
+      )))::integer
+    );
+    return query select false, v_retry_after, 0, v_hour_count;
+    return;
+  end if;
+
+  insert into public.rate_limits (
+    limit_key,
+    action,
+    window_started_at,
+    failure_count,
+    pending_count,
+    blocked_until,
+    updated_at
+  )
+  values (
+    p_minute_key,
+    'password_forgot_minute',
+    p_now,
+    0,
+    0,
+    null,
+    p_now
+  )
+  on conflict (limit_key, action) do nothing;
+
+  select current_limit.window_started_at, current_limit.failure_count
+  into v_minute_started_at, v_minute_count
+  from public.rate_limits as current_limit
+  where current_limit.limit_key = p_minute_key
+    and current_limit.action = 'password_forgot_minute'
+  for update;
+
+  if v_minute_started_at + interval '1 minute' <= p_now then
+    v_minute_started_at := p_now;
+    v_minute_count := 0;
+  end if;
+  v_minute_count := least(v_minute_count + 1, 2);
+
+  update public.rate_limits as current_limit
+  set
+    window_started_at = v_minute_started_at,
+    failure_count = v_minute_count,
+    pending_count = 0,
+    blocked_until = null,
+    updated_at = p_now
+  where current_limit.limit_key = p_minute_key
+    and current_limit.action = 'password_forgot_minute';
+
+  if v_minute_count > 1 then
+    v_retry_after := greatest(
+      1,
+      ceil(extract(epoch from (
+        v_minute_started_at + interval '1 minute' - p_now
+      )))::integer
+    );
+    return query select false, v_retry_after, v_minute_count, v_hour_count;
+    return;
+  end if;
+
+  return query select true, 0, v_minute_count, v_hour_count;
+end;
+$$;
+
 create function public.finalize_report_publish(
   p_report_date date,
   p_title text,
@@ -777,6 +922,7 @@ revoke all on function public.record_rate_limit_failure(text, text, integer, int
 revoke all on function public.clear_rate_limit(text, text) from public, anon, authenticated, service_role;
 revoke all on function public.reserve_rate_limit_attempt(uuid, text, text, integer, integer, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.finalize_rate_limit_attempt(uuid, text, text, text, integer, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.consume_password_recovery_attempt(text, text, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.finalize_report_publish(date, text, uuid, text, bigint, integer, date[], uuid, timestamptz, jsonb) from public, anon, authenticated, service_role;
 
 grant execute on function public.check_rate_limit(text, text, integer, integer, integer, timestamptz) to service_role;
@@ -784,4 +930,5 @@ grant execute on function public.record_rate_limit_failure(text, text, integer, 
 grant execute on function public.clear_rate_limit(text, text) to service_role;
 grant execute on function public.reserve_rate_limit_attempt(uuid, text, text, integer, integer, integer, timestamptz) to service_role;
 grant execute on function public.finalize_rate_limit_attempt(uuid, text, text, text, integer, timestamptz) to service_role;
+grant execute on function public.consume_password_recovery_attempt(text, text, timestamptz) to service_role;
 grant execute on function public.finalize_report_publish(date, text, uuid, text, bigint, integer, date[], uuid, timestamptz, jsonb) to service_role;

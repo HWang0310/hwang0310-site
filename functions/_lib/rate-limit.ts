@@ -92,6 +92,42 @@ export type RateLimitRpcClient = {
   ): PromiseLike<RateLimitRpcResponse<RateLimitFinalizeRow[] | null>>;
 };
 
+export type PasswordRecoveryLimitArgs = {
+  p_minute_key: string;
+  p_hour_key: string;
+  p_now: string;
+};
+
+export type PasswordRecoveryLimitRow = {
+  is_allowed: boolean;
+  retry_after_seconds: number;
+  minute_count: number;
+  hour_count: number;
+};
+
+export type PasswordRecoveryRateLimitRpc = {
+  consumePasswordRecoveryAttempt(
+    args: PasswordRecoveryLimitArgs,
+  ): Promise<RateLimitRpcResponse<PasswordRecoveryLimitRow[] | null>>;
+};
+
+export type PasswordRecoveryRateLimitRpcClient = {
+  rpc(
+    name: "consume_password_recovery_attempt",
+    args: PasswordRecoveryLimitArgs,
+  ): PromiseLike<RateLimitRpcResponse<PasswordRecoveryLimitRow[] | null>>;
+};
+
+export function createPasswordRecoveryRateLimitRpc(
+  client: PasswordRecoveryRateLimitRpcClient,
+): PasswordRecoveryRateLimitRpc {
+  return {
+    async consumePasswordRecoveryAttempt(args) {
+      return client.rpc("consume_password_recovery_attempt", args);
+    },
+  };
+}
+
 export function createRateLimitRpc(client: RateLimitRpcClient): RateLimitRpc {
   return {
     async reserveRateLimitAttempt(args) {
@@ -156,12 +192,17 @@ export function requireCloudflareClientIp(request: Request): string {
   return value;
 }
 
-async function hmacKey(
+export async function hmacRateLimitKey(
   secret: string,
-  domain: "phone" | "ip" | "root",
+  domain: string,
   value: string,
 ): Promise<string> {
-  if (secret.trim().length === 0) {
+  if (
+    secret.trim().length === 0 ||
+    domain.length === 0 ||
+    domain.length > 80 ||
+    /[^a-z0-9_-]/u.test(domain)
+  ) {
     throw new HttpError(500, "服务器配置不可用");
   }
   const encoder = new TextEncoder();
@@ -191,10 +232,10 @@ export async function buildLoginLimitTargets(
 ): Promise<LoginLimitTarget[]> {
   const clientIp = requireCloudflareClientIp(request);
   const [phoneKey, ipKey, rootKey] = await Promise.all([
-    hmacKey(secret, "phone", phone),
-    hmacKey(secret, "ip", clientIp),
+    hmacRateLimitKey(secret, "phone", phone),
+    hmacRateLimitKey(secret, "ip", clientIp),
     trustedRole === "root_admin"
-      ? hmacKey(secret, "root", phone)
+      ? hmacRateLimitKey(secret, "root", phone)
       : Promise.resolve(null),
   ]);
   const targets: LoginLimitTarget[] = [

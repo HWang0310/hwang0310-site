@@ -20,6 +20,7 @@ describe("income forecast access-control migration", () => {
       "enable row level security",
       "reserve_rate_limit_attempt",
       "finalize_rate_limit_attempt",
+      "consume_password_recovery_attempt",
       "finalize_report_publish",
       "2026-07-20",
       "2026-07-25",
@@ -49,6 +50,10 @@ describe("income forecast access-control migration", () => {
       "for update",
       "greatest(current_limit.pending_count - 1, 0)",
       "grant select, insert, delete on table public.rate_limit_reservations to service_role",
+      "create function public.consume_password_recovery_attempt(\n  p_minute_key text,\n  p_hour_key text,\n  p_now timestamptz default now()",
+      "v_hour_count := least(v_hour_count + 1, 11)",
+      "if v_hour_count > 10 then",
+      "v_minute_count := least(v_minute_count + 1, 2)",
       "with cleaned_reports as (",
       "visibility = 'private'\n      and status = 'online'\n      and not pinned",
     ]) {
@@ -80,6 +85,11 @@ describe("income forecast access-control migration", () => {
       "releasing the admitted attempt clears its provisional block",
       "a committed failure retains its concurrent block",
       "a successful ip release clears its provisional block",
+      "minute-blocked recovery submissions still consume the hourly window",
+      "the second request at 59 seconds is rejected without extending the window",
+      "the original minute window reopens exactly at 60 seconds",
+      "the eleventh hourly request is rejected at 3599 seconds",
+      "the original hourly window reopens exactly at 3600 seconds",
       "whole finalize_report_publish call rolls back",
     ]) {
       expect(pgTap).toContain(required);

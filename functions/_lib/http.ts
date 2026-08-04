@@ -90,7 +90,7 @@ export function normalizeName(value: unknown): string {
     throw new HttpError(400, "请输入姓名");
   }
 
-  const name = value.trim().replace(/\s+/gu, " ");
+  const name = value.trim().replace(/\s+/gu, " ").normalize("NFC");
   if (
     name.length === 0 ||
     name.length > MAX_NAME_LENGTH ||

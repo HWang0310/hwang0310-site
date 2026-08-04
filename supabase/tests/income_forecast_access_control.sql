@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(95);
+select plan(106);
 
 select has_table('public', 'profiles', 'profiles table exists');
 select has_table('public', 'reports', 'reports table exists');
@@ -118,6 +118,10 @@ select ok(
   'finalize_rate_limit_attempt RPC exists'
 );
 select ok(
+  to_regprocedure('public.consume_password_recovery_attempt(text,text,timestamp with time zone)') is not null,
+  'consume_password_recovery_attempt RPC exists'
+);
+select ok(
   to_regprocedure('public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)') is not null,
   'finalize_report_publish RPC exists'
 );
@@ -146,6 +150,11 @@ select is(
   (select prosecdef from pg_proc where oid = 'public.finalize_rate_limit_attempt(uuid,text,text,text,integer,timestamp with time zone)'::regprocedure),
   false,
   'finalize_rate_limit_attempt uses security invoker'
+);
+select is(
+  (select prosecdef from pg_proc where oid = 'public.consume_password_recovery_attempt(text,text,timestamp with time zone)'::regprocedure),
+  false,
+  'consume_password_recovery_attempt uses security invoker'
 );
 select is(
   (select prosecdef from pg_proc where oid = 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)'::regprocedure),
@@ -184,6 +193,12 @@ select ok(
   'only service_role can execute finalize_rate_limit_attempt'
 );
 select ok(
+  not has_function_privilege('anon', 'public.consume_password_recovery_attempt(text,text,timestamp with time zone)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.consume_password_recovery_attempt(text,text,timestamp with time zone)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.consume_password_recovery_attempt(text,text,timestamp with time zone)', 'EXECUTE'),
+  'only service_role can execute consume_password_recovery_attempt'
+);
+select ok(
   not has_function_privilege('anon', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE')
   and has_function_privilege('service_role', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE'),
@@ -196,6 +211,87 @@ select is(
   current_user,
   'service_role',
   'behavior tests execute with the real service_role privileges and RLS bypass'
+);
+
+select results_eq(
+  $test$
+    select is_allowed, retry_after_seconds, minute_count, hour_count
+    from public.consume_password_recovery_attempt(
+      'recovery-minute-key',
+      'recovery-hour-key',
+      timestamptz '2026-08-04 00:00:00+00'
+    )
+  $test$,
+  $test$values (true, 0, 1, 1)$test$,
+  'the first recovery request consumes both fixed windows'
+);
+select results_eq(
+  $test$
+    select is_allowed, retry_after_seconds, minute_count, hour_count
+    from public.consume_password_recovery_attempt(
+      'recovery-minute-key',
+      'recovery-hour-key',
+      timestamptz '2026-08-04 00:00:59+00'
+    )
+  $test$,
+  $test$values (false, 1, 2, 2)$test$,
+  'the second request at 59 seconds is rejected without extending the window'
+);
+select results_eq(
+  $test$
+    select is_allowed, retry_after_seconds, minute_count, hour_count
+    from public.consume_password_recovery_attempt(
+      'recovery-minute-key',
+      'recovery-hour-key',
+      timestamptz '2026-08-04 00:01:00+00'
+    )
+  $test$,
+  $test$values (true, 0, 1, 3)$test$,
+  'the original minute window reopens exactly at 60 seconds'
+);
+
+do $test$
+begin
+  for attempt in 1..10 loop
+    perform * from public.consume_password_recovery_attempt(
+      'recovery-rapid-minute-key',
+      'recovery-rapid-hour-key',
+      timestamptz '2026-08-04 01:00:00+00'
+    );
+  end loop;
+end;
+$test$;
+
+select is(
+  (select failure_count from public.rate_limits
+    where limit_key = 'recovery-rapid-hour-key'
+      and action = 'password_forgot_hour'),
+  10,
+  'minute-blocked recovery submissions still consume the hourly window'
+);
+select results_eq(
+  $test$
+    select is_allowed, retry_after_seconds, minute_count, hour_count
+    from public.consume_password_recovery_attempt(
+      'recovery-rapid-minute-key',
+      'recovery-rapid-hour-key',
+      timestamptz '2026-08-04 01:59:59+00'
+    )
+  $test$,
+  $test$values (false, 1, 0, 11)$test$,
+  'the eleventh hourly request is rejected at 3599 seconds'
+);
+select results_eq(
+  $test$
+    select is_allowed, retry_after_seconds, minute_count, hour_count
+    from public.consume_password_recovery_attempt(
+      'recovery-rapid-minute-key',
+      'recovery-rapid-hour-key',
+      timestamptz '2026-08-04 02:00:00+00'
+    )
+  $test$,
+  $test$values (true, 0, 1, 1)$test$,
+  'the original hourly window reopens exactly at 3600 seconds'
 );
 
 insert into public.reports (
@@ -881,6 +977,17 @@ select throws_like(
   '%permission denied for function reserve_rate_limit_attempt%',
   'anon cannot execute the atomic reservation RPC'
 );
+select throws_like(
+  $test$
+    select * from public.consume_password_recovery_attempt(
+      'anon-minute-key',
+      'anon-hour-key',
+      timestamptz '2026-08-04 03:00:00+00'
+    )
+  $test$,
+  '%permission denied for function consume_password_recovery_attempt%',
+  'anon cannot execute the password-recovery consume RPC'
+);
 
 reset role;
 
@@ -908,6 +1015,17 @@ select throws_like(
   $test$,
   '%permission denied for function finalize_rate_limit_attempt%',
   'authenticated cannot execute the atomic finalization RPC'
+);
+select throws_like(
+  $test$
+    select * from public.consume_password_recovery_attempt(
+      'authenticated-minute-key',
+      'authenticated-hour-key',
+      timestamptz '2026-08-04 03:00:00+00'
+    )
+  $test$,
+  '%permission denied for function consume_password_recovery_attempt%',
+  'authenticated cannot execute the password-recovery consume RPC'
 );
 
 reset role;
