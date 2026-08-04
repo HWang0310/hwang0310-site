@@ -43,6 +43,13 @@ export type SessionDependencies = {
   getProfile(userId: string): Promise<ProfileRecord | null>;
 };
 
+export type RevokeSessionDependencies = {
+  refreshSession(refreshToken: string): Promise<RefreshedSession | null>;
+  revokeAccessToken(accessToken: string): Promise<void>;
+};
+
+type DefaultSessionDependencies = SessionDependencies & RevokeSessionDependencies;
+
 export type SessionUser = {
   id: string;
   name: string;
@@ -123,7 +130,7 @@ function isAppRole(value: unknown): value is AppRole {
   return typeof value === "string" && APP_ROLES.has(value);
 }
 
-function defaultDependencies(env: Env): SessionDependencies {
+function defaultDependencies(env: Env): DefaultSessionDependencies {
   const config = requireEnv(env);
   const publicClient = createPublicSupabaseClient(config);
   const serviceClient = createServiceRoleSupabaseClient(config);
@@ -199,7 +206,59 @@ function defaultDependencies(env: Env): SessionDependencies {
         throw new HttpError(503, "登录服务暂不可用");
       }
     },
+
+    async revokeAccessToken(accessToken) {
+      try {
+        const response = await serviceClient.auth.admin.signOut(
+          accessToken,
+          "local",
+        );
+        const status = response.error?.status;
+        if (
+          response.error !== null &&
+          status !== 401 &&
+          status !== 403 &&
+          status !== 404
+        ) {
+          throw new HttpError(503, "登录服务暂不可用");
+        }
+      } catch {
+        throw new HttpError(503, "登录服务暂不可用");
+      }
+    },
   };
+}
+
+export async function revokeSession(
+  request: Request,
+  env: Env,
+  responseHeaders: Headers,
+  dependencies?: RevokeSessionDependencies,
+): Promise<void> {
+  const config = requireEnv(env);
+  requireSameOrigin(request, config.siteOrigin);
+  appendSessionCookies(responseHeaders, clearSessionCookieHeaders());
+
+  const cookies = readAuthCookies(request);
+  if (cookies.accessToken === null && cookies.refreshToken === null) return;
+  const revokeDependencies = dependencies ?? defaultDependencies(env);
+
+  try {
+    let accessToken = cookies.accessToken;
+    if (cookies.refreshToken !== null) {
+      const refreshed = await revokeDependencies.refreshSession(
+        cookies.refreshToken,
+      );
+      if (refreshed !== null) {
+        accessToken = refreshed.accessToken;
+      }
+    }
+    if (accessToken !== null) {
+      await revokeDependencies.revokeAccessToken(accessToken);
+    }
+  } catch {
+    throw new HttpError(503, "登录服务暂不可用");
+  }
 }
 
 export async function getSession(
