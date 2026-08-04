@@ -14,6 +14,7 @@ import {
   reportCleanupWarning,
   validateStaticTree,
 } from "./static-tree.mjs";
+import { PUBLIC_REPORT_DATES } from "../shared/income-forecast/contracts.ts";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const defaultProjectDir = dirname(scriptDirectory);
@@ -29,6 +30,17 @@ async function runViteBuild({ projectDir, outDir }) {
       emptyOutDir: true,
     },
   });
+}
+
+function assertDefaultStaticReportDates(dates) {
+  if (
+    dates.length !== PUBLIC_REPORT_DATES.length ||
+    dates.some((date, index) => date !== PUBLIC_REPORT_DATES[index])
+  ) {
+    throw new Error(
+      `Static build must stage only public report dates: ${PUBLIC_REPORT_DATES.join(", ")}`
+    );
+  }
 }
 
 /**
@@ -94,6 +106,9 @@ export async function buildSite(options = {}) {
         ),
       distDir: stagedDist,
     });
+    if (stage === stageStaticAssets) {
+      assertDefaultStaticReportDates(result.dates);
+    }
     await validateStaticTree(stagedDist);
     await swap({ stagedDir: stagedDist, targetDir: distDir });
     committed = true;

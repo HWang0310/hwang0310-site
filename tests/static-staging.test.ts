@@ -40,8 +40,30 @@ async function createFixture() {
   const thesisFile = join(root, "original-thesis.pdf");
   const distDir = join(root, "dist");
   const entries = [
-    { date: "20260720", folder: "approved-report-20" },
-    { date: "20260724", folder: "approved-report-24" },
+    {
+      date: "20260720",
+      folder: "approved-report-20",
+      visibility: "public",
+      pinned: true,
+    },
+    {
+      date: "20260724",
+      folder: "private-report-24",
+      visibility: "private",
+      pinned: false,
+    },
+    {
+      date: "20260725",
+      folder: "approved-report-25",
+      visibility: "public",
+      pinned: true,
+    },
+    {
+      date: "20260726",
+      folder: "private-report-26",
+      visibility: "private",
+      pinned: false,
+    },
   ];
 
   await mkdir(reportRoot, { recursive: true });
@@ -72,14 +94,14 @@ async function createFixture() {
 }
 
 describe("stageStaticAssets", () => {
-  it("copies every nested report resource to the date-preserving web structure", async () => {
+  it("copies only the public allowlisted reports and never stages private directories", async () => {
     const fixture = await createFixture();
 
     const result = await stageStaticAssets(fixture);
 
     expect(result).toEqual({
       files: 12,
-      dates: ["20260720", "20260724"],
+      dates: ["20260720", "20260725"],
     });
     expect(
       existsSync(
@@ -93,11 +115,11 @@ describe("stageStaticAssets", () => {
       readFileSync(
         resolve(
           fixture.distDir,
-          "projects/income-forecast/reports/2026/07/24/cities/wuhan/index.html"
+          "projects/income-forecast/reports/2026/07/25/cities/wuhan/index.html"
         ),
         "utf8"
       )
-    ).toContain("Wuhan 20260724");
+    ).toContain("Wuhan 20260725");
     expect(
       existsSync(
         resolve(
@@ -106,6 +128,22 @@ describe("stageStaticAssets", () => {
         )
       )
     ).toBe(true);
+    expect(
+      existsSync(
+        resolve(
+          fixture.distDir,
+          "projects/income-forecast/reports/2026/07/24"
+        )
+      )
+    ).toBe(false);
+    expect(
+      existsSync(
+        resolve(
+          fixture.distDir,
+          "projects/income-forecast/reports/2026/07/26"
+        )
+      )
+    ).toBe(false);
   });
 
   it("writes a browser manifest containing only approved dates and web paths", async () => {
@@ -121,7 +159,7 @@ describe("stageStaticAssets", () => {
       "utf8"
     );
     expect(manifest).toBe(
-      'window.INCOME_FORECAST_ARCHIVE = [{"date":"20260720","webPath":"/projects/income-forecast/reports/2026/07/20/"},{"date":"20260724","webPath":"/projects/income-forecast/reports/2026/07/24/"}];\n'
+      'window.INCOME_FORECAST_ARCHIVE = [{"date":"20260720","webPath":"/projects/income-forecast/reports/2026/07/20/"},{"date":"20260725","webPath":"/projects/income-forecast/reports/2026/07/25/"}];\n'
     );
     expect(manifest).not.toContain(fixture.root);
     expect(manifest).not.toContain("file:///Users/");
@@ -141,7 +179,7 @@ describe("stageStaticAssets", () => {
       ),
       "utf8"
     );
-    for (const day of ["20", "24"]) {
+    for (const day of ["20", "25"]) {
       const reportManifest = readFileSync(
         resolve(
           fixture.distDir,
@@ -188,7 +226,7 @@ describe("stageStaticAssets", () => {
     "rejects a report missing required %s",
     async (missing) => {
       const fixture = await createFixture();
-      await rm(join(fixture.reportRoot, fixture.entries[1].folder, missing), {
+      await rm(join(fixture.reportRoot, fixture.entries[2].folder, missing), {
         recursive: true,
         force: true,
       });
@@ -217,7 +255,7 @@ describe("stageStaticAssets", () => {
     await mkdir(resolve(fixture.distDir, "assets/papers"), { recursive: true });
     await writeFile(thesisTarget, "existing thesis");
     await rm(
-      join(fixture.reportRoot, fixture.entries[1].folder, "assets"),
+      join(fixture.reportRoot, fixture.entries[2].folder, "assets"),
       { recursive: true, force: true }
     );
 
