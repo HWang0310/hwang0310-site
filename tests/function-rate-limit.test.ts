@@ -418,59 +418,114 @@ describe("concurrent login reservations", () => {
     },
   );
 
-  it("releases every successful reservation and fails closed when blocked and error results are mixed", async () => {
+  it("releases every target after an uncertain reserve error without masking the original error", async () => {
     const targets = await buildLoginLimitTargets(
       env.RATE_LIMIT_HMAC_SECRET,
       rootProfile.phone,
       failedLoginRequest(rootProfile.phone),
       "root_admin",
     );
-    const pending = new Set<string>();
-    const finalized: RateLimitFinalizeArgs[] = [];
+    const storedRpc = new InMemoryRateLimitRpc();
+    const timestamp = Date.parse("2026-08-04T00:00:00.000Z");
+    storedRpc.limits.set(`login_phone\n${targets[0]?.key}`, {
+      windowStartedAt: timestamp,
+      failureCount: 9,
+      pendingCount: 0,
+      blockedUntil: null,
+    });
+    storedRpc.limits.set(`login_ip\n${targets[1]?.key}`, {
+      windowStartedAt: timestamp,
+      failureCount: 20,
+      pendingCount: 0,
+      blockedUntil: timestamp + 300_000,
+    });
+    const cleanupResults: Array<{
+      action: RateLimitFinalizeArgs["p_action"];
+      applied: boolean;
+      outcome: RateLimitFinalizeArgs["p_outcome"];
+      reservationId: string;
+    }> = [];
     const rpc: RateLimitRpc = {
       async reserveRateLimitAttempt(args) {
-        if (args.p_action === "login_ip") {
-          return rpcResponse([
-            {
-              is_reserved: false,
-              is_blocked: true,
-              blocked_until: "2026-08-04T00:05:00.000Z",
-              failure_count: 20,
-            },
-          ]);
-        }
         if (args.p_action === "login_root_admin") {
           throw new Error("root reservation unavailable");
         }
-        pending.add(`${args.p_reservation_id}:${args.p_action}`);
+        const response = await storedRpc.reserveRateLimitAttempt(args);
+        if (args.p_action !== "login_phone") return response;
+
+        await storedRpc.reserveRateLimitAttempt({
+          ...args,
+          p_reservation_id: "00000000-0000-4000-8000-000000000099",
+        });
         return rpcResponse([
           {
-            is_reserved: true,
+            is_reserved: false,
             is_blocked: false,
             blocked_until: null,
-            failure_count: 0,
+            failure_count: 9,
           },
         ]);
       },
       async finalizeRateLimitAttempt(args) {
-        finalized.push(args);
-        pending.delete(`${args.p_reservation_id}:${args.p_action}`);
-        return rpcResponse([{ applied: true, failure_count: 0, pending_count: 0 }]);
+        const response = await storedRpc.finalizeRateLimitAttempt(args);
+        cleanupResults.push({
+          action: args.p_action,
+          applied: response.data?.[0]?.applied ?? false,
+          outcome: args.p_outcome,
+          reservationId: args.p_reservation_id,
+        });
+        if (args.p_action === "login_phone") {
+          throw new Error("release response lost");
+        }
+        return response;
       },
     };
 
-    await expect(
+    const admission = expect(
       reserveLoginAttempt(
         targets,
         rpc,
         new Date("2026-08-04T00:00:00.000Z"),
       ),
-    ).rejects.toThrow("root reservation unavailable");
+    ).rejects.toMatchObject({
+      status: 503,
+      message: "限流服务暂不可用",
+    });
+    await admission;
 
-    expect(pending.size).toBe(0);
-    expect(finalized.map((args) => [args.p_action, args.p_outcome])).toEqual([
-      ["login_phone", "release"],
+    const reservationIds = new Set(
+      storedRpc.calls
+        .filter((call) => call.name === "reserve_rate_limit_attempt")
+        .map((call) => call.args.p_reservation_id)
+        .filter((id) => id !== "00000000-0000-4000-8000-000000000099"),
+    );
+    expect(reservationIds.size).toBe(1);
+    expect(cleanupResults).toEqual([
+      {
+        action: "login_phone",
+        applied: true,
+        outcome: "release",
+        reservationId: [...reservationIds][0],
+      },
+      {
+        action: "login_ip",
+        applied: false,
+        outcome: "release",
+        reservationId: [...reservationIds][0],
+      },
+      {
+        action: "login_root_admin",
+        applied: false,
+        outcome: "release",
+        reservationId: [...reservationIds][0],
+      },
     ]);
+    expect(storedRpc.reservations.size).toBe(0);
+    expect(storedRpc.limits.get(`login_phone\n${targets[0]?.key}`)).toMatchObject({
+      failureCount: 9,
+      pendingCount: 0,
+      blockedUntil: null,
+    });
   });
 
   it("uses target order for blocked priority and returns every unblocked reservation", async () => {

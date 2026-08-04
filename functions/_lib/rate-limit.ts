@@ -351,9 +351,9 @@ export async function reserveLoginAttempt(
   }
 
   if (hasError) {
-    if (reservedTargets.length > 0) {
+    if (targets.length > 0) {
       await Promise.allSettled(
-        reservedTargets.map((target) =>
+        targets.map((target) =>
           rpc.finalizeRateLimitAttempt({
             p_reservation_id: reservationId,
             p_limit_key: target.key,
