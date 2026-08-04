@@ -1,0 +1,407 @@
+begin;
+
+create extension if not exists pgtap with schema extensions;
+
+select plan(54);
+
+select has_table('public', 'profiles', 'profiles table exists');
+select has_table('public', 'reports', 'reports table exists');
+select has_table('public', 'audit_events', 'audit_events table exists');
+select has_table('public', 'rate_limits', 'rate_limits table exists');
+
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.profiles'::regclass),
+  'profiles has RLS enabled'
+);
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.reports'::regclass),
+  'reports has RLS enabled'
+);
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.audit_events'::regclass),
+  'audit_events has RLS enabled'
+);
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.rate_limits'::regclass),
+  'rate_limits has RLS enabled'
+);
+
+select ok(
+  not exists (
+    select 1
+    from unnest(array['anon', 'authenticated']) as role_name
+    cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+    where has_table_privilege(role_name, 'public.profiles', privilege_name)
+  )
+  and (
+    select bool_and(has_table_privilege('service_role', 'public.profiles', privilege_name))
+    from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+  ),
+  'profiles is available only to service_role'
+);
+select ok(
+  not exists (
+    select 1
+    from unnest(array['anon', 'authenticated']) as role_name
+    cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+    where has_table_privilege(role_name, 'public.reports', privilege_name)
+  )
+  and (
+    select bool_and(has_table_privilege('service_role', 'public.reports', privilege_name))
+    from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+  ),
+  'reports is available only to service_role'
+);
+select ok(
+  not exists (
+    select 1
+    from unnest(array['anon', 'authenticated']) as role_name
+    cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+    where has_table_privilege(role_name, 'public.audit_events', privilege_name)
+  )
+  and has_table_privilege('service_role', 'public.audit_events', 'SELECT')
+  and has_table_privilege('service_role', 'public.audit_events', 'INSERT')
+  and not has_table_privilege('service_role', 'public.audit_events', 'UPDATE')
+  and not has_table_privilege('service_role', 'public.audit_events', 'DELETE'),
+  'audit_events grants service_role append-only access'
+);
+select ok(
+  not exists (
+    select 1
+    from unnest(array['anon', 'authenticated']) as role_name
+    cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+    where has_table_privilege(role_name, 'public.rate_limits', privilege_name)
+  )
+  and (
+    select bool_and(has_table_privilege('service_role', 'public.rate_limits', privilege_name))
+    from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+  ),
+  'rate_limits is available only to service_role'
+);
+
+select ok(
+  to_regprocedure('public.check_rate_limit(text,text,timestamp with time zone)') is not null,
+  'check_rate_limit RPC exists'
+);
+select ok(
+  to_regprocedure('public.record_rate_limit_failure(text,text,integer,integer,integer,timestamp with time zone)') is not null,
+  'record_rate_limit_failure RPC exists'
+);
+select ok(
+  to_regprocedure('public.clear_rate_limit(text,text)') is not null,
+  'clear_rate_limit RPC exists'
+);
+select ok(
+  to_regprocedure('public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)') is not null,
+  'finalize_report_publish RPC exists'
+);
+
+select is(
+  (select prosecdef from pg_proc where oid = 'public.check_rate_limit(text,text,timestamp with time zone)'::regprocedure),
+  false,
+  'check_rate_limit uses security invoker'
+);
+select is(
+  (select prosecdef from pg_proc where oid = 'public.record_rate_limit_failure(text,text,integer,integer,integer,timestamp with time zone)'::regprocedure),
+  false,
+  'record_rate_limit_failure uses security invoker'
+);
+select is(
+  (select prosecdef from pg_proc where oid = 'public.clear_rate_limit(text,text)'::regprocedure),
+  false,
+  'clear_rate_limit uses security invoker'
+);
+select is(
+  (select prosecdef from pg_proc where oid = 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)'::regprocedure),
+  false,
+  'finalize_report_publish uses security invoker'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.check_rate_limit(text,text,timestamp with time zone)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.check_rate_limit(text,text,timestamp with time zone)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.check_rate_limit(text,text,timestamp with time zone)', 'EXECUTE'),
+  'only service_role can execute check_rate_limit'
+);
+select ok(
+  not has_function_privilege('anon', 'public.record_rate_limit_failure(text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.record_rate_limit_failure(text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.record_rate_limit_failure(text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE'),
+  'only service_role can execute record_rate_limit_failure'
+);
+select ok(
+  not has_function_privilege('anon', 'public.clear_rate_limit(text,text)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.clear_rate_limit(text,text)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.clear_rate_limit(text,text)', 'EXECUTE'),
+  'only service_role can execute clear_rate_limit'
+);
+select ok(
+  not has_function_privilege('anon', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE'),
+  'only service_role can execute finalize_report_publish'
+);
+
+insert into public.reports (
+  report_date,
+  title,
+  visibility,
+  pinned,
+  status
+)
+values (
+  date '2026-07-20',
+  'Public sample',
+  'private',
+  false,
+  'staging'
+);
+
+select is(
+  (select visibility::text from public.reports where report_date = date '2026-07-20'),
+  'public',
+  'public sample visibility is forced to public on insert'
+);
+select ok(
+  (select pinned from public.reports where report_date = date '2026-07-20'),
+  'public sample is forced to pinned on insert'
+);
+select is(
+  (select status::text from public.reports where report_date = date '2026-07-20'),
+  'online',
+  'public sample status is forced to online on insert'
+);
+
+update public.reports
+set visibility = 'private', pinned = false, status = 'offline'
+where report_date = date '2026-07-20';
+
+select is(
+  (select visibility::text from public.reports where report_date = date '2026-07-20'),
+  'public',
+  'public sample visibility remains public on update'
+);
+select ok(
+  (select pinned from public.reports where report_date = date '2026-07-20'),
+  'public sample remains pinned on update'
+);
+select is(
+  (select status::text from public.reports where report_date = date '2026-07-20'),
+  'online',
+  'public sample remains online on update'
+);
+select throws_ok(
+  $test$delete from public.reports where report_date = date '2026-07-20'$test$,
+  '23514',
+  'protected public income reports cannot be deleted',
+  'public samples cannot be deleted'
+);
+select throws_ok(
+  $test$update public.reports set report_date = date '2026-07-21' where report_date = date '2026-07-20'$test$,
+  '23514',
+  'protected public income report dates cannot be changed',
+  'public sample dates cannot be changed'
+);
+
+do $test$
+begin
+  for attempt in 1..9 loop
+    perform * from public.record_rate_limit_failure(
+      'phone-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 00:00:00+00'
+    );
+  end loop;
+end;
+$test$;
+
+select is(
+  (select is_blocked from public.check_rate_limit('phone-key', 'login_phone', timestamptz '2026-08-04 00:00:00+00')),
+  false,
+  'phone is not blocked before the 10th failure'
+);
+select is(
+  (select failure_count from public.record_rate_limit_failure(
+    'phone-key', 'login_phone', 300, 10, 300, timestamptz '2026-08-04 00:00:00+00'
+  )),
+  10,
+  'the 10th phone failure is recorded'
+);
+select is(
+  (select blocked_until from public.check_rate_limit('phone-key', 'login_phone', timestamptz '2026-08-04 00:00:00+00')),
+  timestamptz '2026-08-04 00:05:00+00',
+  'phone block lasts five minutes from the threshold failure'
+);
+select ok(
+  (select is_blocked from public.check_rate_limit('phone-key', 'login_phone', timestamptz '2026-08-04 00:00:01+00')),
+  'the 11th phone attempt is blocked before authentication'
+);
+
+do $test$
+begin
+  for attempt in 1..19 loop
+    perform * from public.record_rate_limit_failure(
+      'ip-key', 'login_ip', 300, 20, 300, timestamptz '2026-08-04 01:00:00+00'
+    );
+  end loop;
+end;
+$test$;
+
+select is(
+  (select is_blocked from public.check_rate_limit('ip-key', 'login_ip', timestamptz '2026-08-04 01:00:00+00')),
+  false,
+  'IP is not blocked before the 20th failure'
+);
+select is(
+  (select failure_count from public.record_rate_limit_failure(
+    'ip-key', 'login_ip', 300, 20, 300, timestamptz '2026-08-04 01:00:00+00'
+  )),
+  20,
+  'the 20th IP failure is recorded'
+);
+select is(
+  (select blocked_until from public.check_rate_limit('ip-key', 'login_ip', timestamptz '2026-08-04 01:00:00+00')),
+  timestamptz '2026-08-04 01:05:00+00',
+  'IP block lasts five minutes from the threshold failure'
+);
+select ok(
+  (select is_blocked from public.check_rate_limit('ip-key', 'login_ip', timestamptz '2026-08-04 01:00:01+00')),
+  'the 21st IP attempt is blocked before authentication'
+);
+
+do $test$
+begin
+  for attempt in 1..2 loop
+    perform * from public.record_rate_limit_failure(
+      'root-key', 'login_root_admin', 300, 3, 300, timestamptz '2026-08-04 02:00:00+00'
+    );
+  end loop;
+end;
+$test$;
+
+select is(
+  (select is_blocked from public.check_rate_limit('root-key', 'login_root_admin', timestamptz '2026-08-04 02:00:00+00')),
+  false,
+  'root admin is not blocked before the 3rd failure'
+);
+select is(
+  (select failure_count from public.record_rate_limit_failure(
+    'root-key', 'login_root_admin', 300, 3, 300, timestamptz '2026-08-04 02:00:00+00'
+  )),
+  3,
+  'the 3rd root-admin failure is recorded'
+);
+select is(
+  (select blocked_until from public.check_rate_limit('root-key', 'login_root_admin', timestamptz '2026-08-04 02:00:00+00')),
+  timestamptz '2026-08-04 02:05:00+00',
+  'root-admin block lasts five minutes from the threshold failure'
+);
+select ok(
+  (select is_blocked from public.check_rate_limit('root-key', 'login_root_admin', timestamptz '2026-08-04 02:00:01+00')),
+  'the 4th root-admin attempt is blocked before authentication'
+);
+
+select lives_ok(
+  $test$select public.clear_rate_limit('phone-key', 'login_phone')$test$,
+  'a successful login can clear its phone limit'
+);
+select is(
+  (select is_blocked from public.check_rate_limit('phone-key', 'login_phone', timestamptz '2026-08-04 00:00:01+00')),
+  false,
+  'a cleared phone limit is no longer blocked'
+);
+
+insert into public.reports (
+  report_date,
+  title,
+  release_id,
+  storage_prefix,
+  visibility,
+  pinned,
+  status,
+  size_bytes,
+  file_count,
+  published_at
+)
+values (
+  date '2026-07-26',
+  'Old private report',
+  '00000000-0000-0000-0000-000000000026',
+  'reports/2026/07/26/00000000-0000-0000-0000-000000000026/',
+  'private',
+  false,
+  'online',
+  100,
+  2,
+  timestamptz '2026-07-26 08:00:00+00'
+);
+
+select lives_ok(
+  $test$
+    select public.finalize_report_publish(
+      date '2026-07-27',
+      'New private report',
+      '00000000-0000-0000-0000-000000000027',
+      'reports/2026/07/27/00000000-0000-0000-0000-000000000027/',
+      200,
+      3,
+      array[date '2026-07-26'],
+      null,
+      timestamptz '2026-07-27 08:00:00+00',
+      '{"reason":"capacity"}'::jsonb
+    )
+  $test$,
+  'finalize_report_publish activates and cleans in one call'
+);
+select is(
+  (select status::text from public.reports where report_date = date '2026-07-26'),
+  'offline',
+  'finalize_report_publish marks a cleanup report offline'
+);
+select is(
+  (select cleaned_at from public.reports where report_date = date '2026-07-26'),
+  timestamptz '2026-07-27 08:00:00+00',
+  'finalize_report_publish records the cleanup time'
+);
+select is(
+  (select status::text from public.reports where report_date = date '2026-07-27'),
+  'online',
+  'finalize_report_publish activates the new report'
+);
+select is(
+  (select release_id from public.reports where report_date = date '2026-07-27'),
+  '00000000-0000-0000-0000-000000000027'::uuid,
+  'finalize_report_publish activates the requested release'
+);
+select ok(
+  exists (
+    select 1
+    from public.audit_events
+    where event_type = 'report_publish_finalized'
+      and target_id = '2026-07-27'
+      and metadata ->> 'reason' = 'capacity'
+  ),
+  'finalize_report_publish writes its audit event'
+);
+select throws_ok(
+  $test$
+    select public.finalize_report_publish(
+      date '2026-07-28',
+      'Rejected private report',
+      '00000000-0000-0000-0000-000000000028',
+      'reports/2026/07/28/00000000-0000-0000-0000-000000000028/',
+      300,
+      4,
+      array[date '2026-07-20']
+    )
+  $test$,
+  '23514',
+  'all cleanup reports must be online, private, and unpinned',
+  'finalize_report_publish refuses to clean a protected public report'
+);
+select is(
+  (select count(*) from public.reports where report_date = date '2026-07-28'),
+  0::bigint,
+  'a rejected finalization does not activate the new report'
+);
+
+select * from finish();
+rollback;
