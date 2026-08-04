@@ -172,7 +172,7 @@ describe("function foundation HTTP responses", () => {
     expect(await response.json()).toEqual({ ok: true });
   });
 
-  it.each(["POST", "PATCH", "DELETE"])(
+  it.each(["POST", "PUT", "PATCH", "DELETE", "REPORT"])(
     "rejects a missing Origin for %s before authentication",
     (method) => {
       const request = new Request("https://preview.pages.dev/api/session", {
@@ -182,6 +182,19 @@ describe("function foundation HTTP responses", () => {
       expect(() =>
         requireSameOrigin(request, "https://hwang0310.dpdns.org"),
       ).toThrowError(expect.objectContaining({ status: 403 }));
+    },
+  );
+
+  it.each(["GET", "HEAD", "OPTIONS"])(
+    "allows the safe method %s without an Origin header",
+    (method) => {
+      const request = new Request("https://preview.pages.dev/api/session", {
+        method,
+      });
+
+      expect(() =>
+        requireSameOrigin(request, "https://hwang0310.dpdns.org"),
+      ).not.toThrow();
     },
   );
 
@@ -440,6 +453,54 @@ describe("function foundation audit boundary", () => {
         },
       }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("stops traversing as soon as the shared metadata node budget is exhausted", async () => {
+    const branches: unknown[] = Array.from({ length: 100 }, () =>
+      Array.from({ length: 100 }, () => null),
+    );
+    Object.defineProperty(branches, 99, {
+      enumerable: true,
+      get: () => {
+        throw new Error("metadata traversal continued after node exhaustion");
+      },
+    });
+
+    await expect(
+      writeAudit(
+        validEnv(),
+        {
+          action: "report.view",
+          actorUserId: "user-1",
+          result: true,
+          metadata: { branches },
+        },
+        { insertAudit: async () => undefined },
+      ),
+    ).rejects.toMatchObject({ status: 400, message: "审计信息无效" });
+  });
+
+  it("stops traversing as soon as the shared metadata byte budget is exhausted", async () => {
+    const chunks: unknown[] = Array.from({ length: 100 }, () => "x".repeat(2_000));
+    Object.defineProperty(chunks, 99, {
+      enumerable: true,
+      get: () => {
+        throw new Error("metadata traversal continued after byte exhaustion");
+      },
+    });
+
+    await expect(
+      writeAudit(
+        validEnv(),
+        {
+          action: "report.view",
+          actorUserId: "user-1",
+          result: true,
+          metadata: { chunks },
+        },
+        { insertAudit: async () => undefined },
+      ),
+    ).rejects.toMatchObject({ status: 400, message: "审计信息无效" });
   });
 
   it("propagates a failed awaited audit write as a safe service error", async () => {

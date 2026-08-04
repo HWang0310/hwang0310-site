@@ -1,5 +1,6 @@
 const INCOME_FORECAST_ROOT = "/projects/income-forecast/";
 const MAX_NAME_LENGTH = 80;
+const SAFE_HTTP_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export class HttpError extends Error {
   readonly status: number;
@@ -24,7 +25,7 @@ export function json(data: unknown, init: ResponseInit = {}): Response {
 }
 
 export function requireSameOrigin(request: Request, siteOrigin: string): void {
-  if (!new Set(["POST", "PATCH", "DELETE"]).has(request.method.toUpperCase())) {
+  if (SAFE_HTTP_METHODS.has(request.method.toUpperCase())) {
     return;
   }
 
