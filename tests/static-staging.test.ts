@@ -146,6 +146,72 @@ describe("stageStaticAssets", () => {
     ).toBe(false);
   });
 
+  it("rejects an archive missing a required public report date", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      fixture.archiveFile,
+      JSON.stringify(
+        fixture.entries.filter((entry) => entry.date !== "20260720")
+      ),
+      "utf8"
+    );
+
+    await expect(stageStaticAssets(fixture)).rejects.toThrow(
+      "Public report policy requires 20260720 to be public and pinned"
+    );
+  });
+
+  it("rejects an archive when a required public report is private", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      fixture.archiveFile,
+      JSON.stringify(
+        fixture.entries.map((entry) =>
+          entry.date === "20260720" ? { ...entry, visibility: "private" } : entry
+        )
+      ),
+      "utf8"
+    );
+
+    await expect(stageStaticAssets(fixture)).rejects.toThrow(
+      "Public report policy requires 20260720 to be public and pinned"
+    );
+  });
+
+  it("rejects an archive when a required public report is not pinned", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      fixture.archiveFile,
+      JSON.stringify(
+        fixture.entries.map((entry) =>
+          entry.date === "20260725" ? { ...entry, pinned: false } : entry
+        )
+      ),
+      "utf8"
+    );
+
+    await expect(stageStaticAssets(fixture)).rejects.toThrow(
+      "Public report policy requires 20260725 to be public and pinned"
+    );
+  });
+
+  it("rejects an archive containing an unknown visibility state", async () => {
+    const fixture = await createFixture();
+    await writeFile(
+      fixture.archiveFile,
+      JSON.stringify(
+        fixture.entries.map((entry) =>
+          entry.date === "20260724" ? { ...entry, visibility: "internal" } : entry
+        )
+      ),
+      "utf8"
+    );
+
+    await expect(stageStaticAssets(fixture)).rejects.toThrow(
+      "Invalid report visibility at archive entry 1"
+    );
+  });
+
   it("writes a browser manifest containing only approved dates and web paths", async () => {
     const fixture = await createFixture();
 
