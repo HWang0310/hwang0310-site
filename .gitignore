@@ -9,3 +9,8 @@ playwright-report/
 .playwright-cli/
 output/
 tmp/
+.wrangler/
+supabase/.temp/
+.dev.vars
+.env*
+!.env*.example

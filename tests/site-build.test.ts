@@ -215,7 +215,7 @@ describe("replaceDirectoryAtomically", () => {
         { stagedDir, targetDir: fixture.distDir },
         {
           rm: async (path, options) => {
-            await rm(join(path, "previous", "old-site.txt"), { force: true });
+            await rm(join(String(path), "previous", "old-site.txt"), { force: true });
             throw new Error("injected partial backup cleanup failure");
           },
           onCleanupWarning: (error) =>

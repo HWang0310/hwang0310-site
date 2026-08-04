@@ -36,7 +36,7 @@ async function runViteBuild({ projectDir, outDir }) {
  * @property {string} [projectDir]
  * @property {string} [distDir]
  * @property {(options: {projectDir: string, outDir: string}) => Promise<void>} [build]
- * @property {(options: object) => Promise<{files: number, dates: string[]}>} [stage]
+ * @property {(options: {archiveFile: string, reportRoot: string, thesisFile: string, distDir: string}) => Promise<{files: number, dates: string[]}>} [stage]
  * @property {(options: {stagedDir: string, targetDir: string}) => Promise<void>} [swap]
  * @property {typeof rm} [cleanup]
  * @property {(error: unknown, context: string) => void} [onCleanupWarning]

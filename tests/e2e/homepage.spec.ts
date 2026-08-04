@@ -294,7 +294,7 @@ test("reduced-motion preference removes meaningful transitions", async ({ page }
   const dogGuideScrollCalls = await page.evaluate(
     () =>
       (
-        window as Window & {
+        window as unknown as Window & {
           __dogGuideScrollCalls: ScrollIntoViewOptions[];
         }
       ).__dogGuideScrollCalls
