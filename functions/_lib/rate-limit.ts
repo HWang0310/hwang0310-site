@@ -41,77 +41,75 @@ export type RateLimitRpcResponse<T> = {
 type SharedRateLimitArgs = {
   p_limit_key: string;
   p_action: string;
-  p_window_seconds: number;
-  p_max_failures: number;
-  p_block_seconds: number;
   p_now: string;
 };
 
-export type RateLimitCheckArgs = SharedRateLimitArgs;
-export type RateLimitFailureArgs = SharedRateLimitArgs;
-export type RateLimitClearArgs = {
-  p_limit_key: string;
-  p_action: string;
+export type RateLimitReservationArgs = SharedRateLimitArgs & {
+  p_reservation_id: string;
+  p_window_seconds: number;
+  p_max_failures: number;
+  p_block_seconds: number;
 };
 
-export type RateLimitCheckRow = {
+export type RateLimitReservationRow = {
+  is_reserved: boolean;
   is_blocked: boolean;
   blocked_until: string | null;
   failure_count: number;
 };
 
-export type RateLimitFailureRow = {
+export type RateLimitFinalizeOutcome = "failure" | "release" | "success_clear";
+
+export type RateLimitFinalizeArgs = SharedRateLimitArgs & {
+  p_reservation_id: string;
+  p_outcome: RateLimitFinalizeOutcome;
+};
+
+export type RateLimitFinalizeRow = {
+  applied: boolean;
   failure_count: number;
-  blocked_until: string | null;
-  is_blocked: boolean;
+  pending_count: number;
 };
 
 export type RateLimitRpc = {
-  checkRateLimit(
-    args: RateLimitCheckArgs,
-  ): Promise<RateLimitRpcResponse<RateLimitCheckRow[] | null>>;
-  recordRateLimitFailure(
-    args: RateLimitFailureArgs,
-  ): Promise<RateLimitRpcResponse<RateLimitFailureRow[] | null>>;
-  clearRateLimit(
-    args: RateLimitClearArgs,
-  ): Promise<RateLimitRpcResponse<null>>;
+  reserveRateLimitAttempt(
+    args: RateLimitReservationArgs,
+  ): Promise<RateLimitRpcResponse<RateLimitReservationRow[] | null>>;
+  finalizeRateLimitAttempt(
+    args: RateLimitFinalizeArgs,
+  ): Promise<RateLimitRpcResponse<RateLimitFinalizeRow[] | null>>;
 };
 
 export type RateLimitRpcClient = {
   rpc(
-    name: "check_rate_limit",
-    args: RateLimitCheckArgs,
-  ): PromiseLike<RateLimitRpcResponse<RateLimitCheckRow[] | null>>;
+    name: "reserve_rate_limit_attempt",
+    args: RateLimitReservationArgs,
+  ): PromiseLike<RateLimitRpcResponse<RateLimitReservationRow[] | null>>;
   rpc(
-    name: "record_rate_limit_failure",
-    args: RateLimitFailureArgs,
-  ): PromiseLike<RateLimitRpcResponse<RateLimitFailureRow[] | null>>;
-  rpc(
-    name: "clear_rate_limit",
-    args: RateLimitClearArgs,
-  ): PromiseLike<RateLimitRpcResponse<null>>;
+    name: "finalize_rate_limit_attempt",
+    args: RateLimitFinalizeArgs,
+  ): PromiseLike<RateLimitRpcResponse<RateLimitFinalizeRow[] | null>>;
 };
 
 export function createRateLimitRpc(client: RateLimitRpcClient): RateLimitRpc {
   return {
-    async checkRateLimit(args) {
-      return client.rpc("check_rate_limit", args);
+    async reserveRateLimitAttempt(args) {
+      return client.rpc("reserve_rate_limit_attempt", args);
     },
-    async recordRateLimitFailure(args) {
-      return client.rpc("record_rate_limit_failure", args);
-    },
-    async clearRateLimit(args) {
-      return client.rpc("clear_rate_limit", args);
+    async finalizeRateLimitAttempt(args) {
+      return client.rpc("finalize_rate_limit_attempt", args);
     },
   };
 }
 
-export type LoginLimitDecision = Readonly<{
-  blocked: boolean;
-  blockedUntil: string | null;
-  retryAfterSeconds: number;
+export type LoginLimitReservation = Readonly<{
+  id: string;
+  targets: readonly LoginLimitTarget[];
 }>;
+
+export type LoginLimitAdmission =
+  | Readonly<{ admitted: true; reservation: LoginLimitReservation }>
+  | Readonly<{ admitted: false }>;
 
 function invalidClientAddress(): never {
   throw new HttpError(403, "无法验证请求来源");
@@ -219,114 +217,186 @@ export async function buildLoginLimitTargets(
   return targets;
 }
 
-function sharedArgs(target: LoginLimitTarget, now: Date): SharedRateLimitArgs {
+function checkedNow(now: Date): string {
   if (!Number.isFinite(now.getTime())) {
     throw new HttpError(500, "限流服务暂不可用");
   }
+  return now.toISOString();
+}
+
+function reservationArgs(
+  reservationId: string,
+  target: LoginLimitTarget,
+  now: Date,
+): RateLimitReservationArgs {
   return {
+    p_reservation_id: reservationId,
     p_limit_key: target.key,
     p_action: target.action,
     p_window_seconds: target.rule.windowSeconds,
     p_max_failures: target.rule.maxFailures,
     p_block_seconds: target.rule.blockSeconds,
-    p_now: now.toISOString(),
+    p_now: checkedNow(now),
   };
 }
 
-function checkedRow(
-  response: RateLimitRpcResponse<RateLimitCheckRow[] | null>,
-): RateLimitCheckRow {
+function reservationRow(
+  response: RateLimitRpcResponse<RateLimitReservationRow[] | null>,
+): RateLimitReservationRow {
   const row = response.data?.[0];
   if (
     response.success !== true ||
     response.error !== null ||
     response.data?.length !== 1 ||
     row === undefined ||
+    typeof row.is_reserved !== "boolean" ||
     typeof row.is_blocked !== "boolean" ||
     !Number.isInteger(row.failure_count) ||
     row.failure_count < 0 ||
-    (row.blocked_until !== null &&
-      (!Number.isFinite(Date.parse(row.blocked_until)) || !row.is_blocked)) ||
-    (row.is_blocked && row.blocked_until === null)
+    row.is_reserved === row.is_blocked ||
+    (row.is_blocked &&
+      (row.blocked_until === null ||
+        !Number.isFinite(Date.parse(row.blocked_until)))) ||
+    (row.is_reserved && row.blocked_until !== null)
   ) {
     throw new HttpError(503, "限流服务暂不可用");
   }
   return row;
 }
 
-function recordedRow(
-  response: RateLimitRpcResponse<RateLimitFailureRow[] | null>,
-): RateLimitFailureRow {
+function finalizedRow(
+  response: RateLimitRpcResponse<RateLimitFinalizeRow[] | null>,
+): RateLimitFinalizeRow {
   const row = response.data?.[0];
   if (
     response.success !== true ||
     response.error !== null ||
     response.data?.length !== 1 ||
     row === undefined ||
-    typeof row.is_blocked !== "boolean" ||
+    row.applied !== true ||
     !Number.isInteger(row.failure_count) ||
-    row.failure_count < 1 ||
-    (row.blocked_until !== null && !Number.isFinite(Date.parse(row.blocked_until)))
+    row.failure_count < 0 ||
+    !Number.isInteger(row.pending_count) ||
+    row.pending_count < 0
   ) {
     throw new HttpError(503, "限流服务暂不可用");
   }
   return row;
 }
 
-export async function checkLoginLimits(
+async function finalizeTargets(
+  reservation: LoginLimitReservation,
+  rpc: RateLimitRpc,
+  now: Date,
+  outcomeFor: (target: LoginLimitTarget) => RateLimitFinalizeOutcome,
+): Promise<Map<LoginLimitScope, RateLimitFinalizeRow>> {
+  const timestamp = checkedNow(now);
+  const results = await Promise.allSettled(
+    reservation.targets.map(async (target) => {
+      const row = finalizedRow(
+        await rpc.finalizeRateLimitAttempt({
+          p_reservation_id: reservation.id,
+          p_limit_key: target.key,
+          p_action: target.action,
+          p_outcome: outcomeFor(target),
+          p_now: timestamp,
+        }),
+      );
+      return [target.scope, row] as const;
+    }),
+  );
+  const entries: Array<readonly [LoginLimitScope, RateLimitFinalizeRow]> = [];
+  for (const result of results) {
+    if (result.status === "rejected") throw result.reason;
+    entries.push(result.value);
+  }
+  return new Map(entries);
+}
+
+export async function reserveLoginAttempt(
   targets: readonly LoginLimitTarget[],
   rpc: RateLimitRpc,
   now: Date,
-): Promise<LoginLimitDecision> {
-  const rows = await Promise.all(
-    targets.map(async (target) =>
-      checkedRow(await rpc.checkRateLimit(sharedArgs(target, now))),
-    ),
-  );
-  const deadlines = rows
-    .filter((row) => row.is_blocked)
-    .map((row) => Date.parse(row.blocked_until ?? ""));
-  if (deadlines.length === 0) {
-    return { blocked: false, blockedUntil: null, retryAfterSeconds: 0 };
+): Promise<LoginLimitAdmission> {
+  const reservationId = crypto.randomUUID();
+  const reservedTargets: LoginLimitTarget[] = [];
+  try {
+    for (const target of targets) {
+      const row = reservationRow(
+        await rpc.reserveRateLimitAttempt(
+          reservationArgs(reservationId, target, now),
+        ),
+      );
+      if (row.is_blocked) {
+        if (reservedTargets.length > 0) {
+          await finalizeTargets(
+            { id: reservationId, targets: reservedTargets },
+            rpc,
+            now,
+            () => "release",
+          );
+        }
+        return { admitted: false };
+      }
+      reservedTargets.push(target);
+    }
+  } catch (error) {
+    if (reservedTargets.length > 0) {
+      await Promise.allSettled(
+        reservedTargets.map((target) =>
+          rpc.finalizeRateLimitAttempt({
+            p_reservation_id: reservationId,
+            p_limit_key: target.key,
+            p_action: target.action,
+            p_outcome: "release",
+            p_now: checkedNow(now),
+          }),
+        ),
+      );
+    }
+    throw error;
   }
-  const latestDeadline = Math.max(...deadlines);
   return {
-    blocked: true,
-    blockedUntil: new Date(latestDeadline).toISOString(),
-    retryAfterSeconds: Math.max(
-      1,
-      Math.ceil((latestDeadline - now.getTime()) / 1_000),
-    ),
+    admitted: true,
+    reservation: { id: reservationId, targets: [...reservedTargets] },
   };
 }
 
-export async function recordLoginFailures(
-  targets: readonly LoginLimitTarget[],
+export async function finalizeLoginFailure(
+  reservation: LoginLimitReservation,
+  rpc: RateLimitRpc,
+  now: Date,
+): Promise<number> {
+  const rows = await finalizeTargets(
+    reservation,
+    rpc,
+    now,
+    () => "failure",
+  );
+  const phone = rows.get("phone");
+  if (phone === undefined) {
+    throw new HttpError(503, "限流服务暂不可用");
+  }
+  return phone.failure_count;
+}
+
+export async function finalizeLoginSuccess(
+  reservation: LoginLimitReservation,
   rpc: RateLimitRpc,
   now: Date,
 ): Promise<void> {
-  await Promise.all(
-    targets.map(async (target) => {
-      recordedRow(await rpc.recordRateLimitFailure(sharedArgs(target, now)));
-    }),
+  await finalizeTargets(
+    reservation,
+    rpc,
+    now,
+    (target) => (target.scope === "ip" ? "release" : "success_clear"),
   );
 }
 
-export async function clearLoginIdentityLimits(
-  targets: readonly LoginLimitTarget[],
+export async function releaseLoginAttempt(
+  reservation: LoginLimitReservation,
   rpc: RateLimitRpc,
+  now: Date,
 ): Promise<void> {
-  await Promise.all(
-    targets
-      .filter((target) => target.scope !== "ip")
-      .map(async (target) => {
-        const response = await rpc.clearRateLimit({
-          p_limit_key: target.key,
-          p_action: target.action,
-        });
-        if (response.success !== true || response.error !== null) {
-          throw new HttpError(503, "限流服务暂不可用");
-        }
-      }),
-  );
+  await finalizeTargets(reservation, rpc, now, () => "release");
 }

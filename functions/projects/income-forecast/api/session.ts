@@ -13,17 +13,20 @@ import {
 } from "../../../_lib/http";
 import {
   buildLoginLimitTargets,
-  checkLoginLimits,
-  clearLoginIdentityLimits,
   createRateLimitRpc,
-  recordLoginFailures,
+  finalizeLoginFailure,
+  finalizeLoginSuccess,
+  releaseLoginAttempt,
   requireCloudflareClientIp,
+  reserveLoginAttempt,
   type RateLimitRpc,
   type RateLimitRpcClient,
 } from "../../../_lib/rate-limit";
 import {
   appendSessionCookies,
   buildSessionCookieHeaders,
+  clearSessionCookieHeaders,
+  createRevokeSessionDependencies,
   getSession,
   revokeSession,
   type ProfileRecord,
@@ -38,6 +41,8 @@ const MAX_LOGIN_BODY_BYTES = 4_096;
 const MAX_PASSWORD_LENGTH = 1_024;
 const LOGIN_ERROR = "手机号或密码错误";
 const RATE_LIMIT_ERROR = "登录尝试过多，请稍后再试";
+const RATE_LIMIT_RETRY_AFTER_SECONDS = 300;
+const PUBLIC_RATE_LIMIT_FAILURE_THRESHOLD = 4;
 const APP_ROLES: ReadonlySet<string> = new Set(["user", "admin", "root_admin"]);
 
 export type SessionResponse = {
@@ -70,7 +75,7 @@ export type SessionRouteDependencies = {
   }): Promise<LoginResult | null>;
   getSession(request: Request): Promise<SessionUser | null>;
   revokeAccessToken(accessToken: string): Promise<void>;
-  revokeSession(request: Request, responseHeaders: Headers): Promise<void>;
+  revokeSession(request: Request): Promise<void>;
   writeAudit(event: AuditEventInput): Promise<void>;
 };
 
@@ -206,11 +211,14 @@ function responseForError(error: unknown, headers?: Headers): Response {
   );
 }
 
-function defaultDependencies(env: Env): SessionRouteDependencies {
-  const config = requireEnv(env);
+function defaultDependencies(
+  env: Env,
+  config: ReturnType<typeof requireEnv>,
+): SessionRouteDependencies {
   const publicClient = createPublicSupabaseClient(config);
   const serviceClient = createServiceRoleSupabaseClient(config);
   const rateLimitClient = serviceClient as typeof serviceClient & RateLimitRpcClient;
+  const revokeDependencies = createRevokeSessionDependencies(config);
 
   return {
     rateLimitRpc: createRateLimitRpc(rateLimitClient),
@@ -298,8 +306,8 @@ function defaultDependencies(env: Env): SessionRouteDependencies {
       }
     },
 
-    revokeSession: (request, responseHeaders) =>
-      revokeSession(request, env, responseHeaders),
+    revokeSession: (request) =>
+      revokeSession(request, config.siteOrigin, revokeDependencies),
     writeAudit: (event) => writeAudit(env, event),
   };
 }
@@ -317,6 +325,33 @@ async function auditFailedLogin(
         ? { reason }
         : { reason, retryAfterSeconds },
   });
+}
+
+async function bestEffortRateLimitAudit(
+  dependencies: SessionRouteDependencies,
+): Promise<void> {
+  try {
+    await auditFailedLogin(
+      dependencies,
+      "rate_limited",
+      RATE_LIMIT_RETRY_AFTER_SECONDS,
+    );
+  } catch {
+    // A completed admission decision must not be changed by audit availability.
+  }
+}
+
+function rateLimitedResponse(): Response {
+  return json(
+    {
+      error: RATE_LIMIT_ERROR,
+      retryAfterSeconds: RATE_LIMIT_RETRY_AFTER_SECONDS,
+    },
+    {
+      status: 429,
+      headers: { "Retry-After": String(RATE_LIMIT_RETRY_AFTER_SECONDS) },
+    },
+  );
 }
 
 async function postSession(
@@ -349,32 +384,40 @@ async function postSession(
     request,
     profile?.role,
   );
-  const decision = await checkLoginLimits(
+  const admission = await reserveLoginAttempt(
     targets,
     dependencies.rateLimitRpc,
     now,
   );
-  if (decision.blocked) {
-    await auditFailedLogin(
-      dependencies,
-      "rate_limited",
-      decision.retryAfterSeconds,
-    );
-    return json(
-      { error: RATE_LIMIT_ERROR, retryAfterSeconds: decision.retryAfterSeconds },
-      {
-        status: 429,
-        headers: { "Retry-After": String(decision.retryAfterSeconds) },
-      },
-    );
+  if (!admission.admitted) {
+    await bestEffortRateLimitAudit(dependencies);
+    return rateLimitedResponse();
   }
 
-  const login = await dependencies.signInWithPassword({
-    phone,
-    password: body.password,
-  });
+  let login: LoginResult | null;
+  try {
+    login = await dependencies.signInWithPassword({
+      phone,
+      password: body.password,
+    });
+  } catch (error) {
+    await releaseLoginAttempt(
+      admission.reservation,
+      dependencies.rateLimitRpc,
+      dependencies.now(),
+    );
+    throw error;
+  }
   if (login === null) {
-    await recordLoginFailures(targets, dependencies.rateLimitRpc, now);
+    const phoneFailureCount = await finalizeLoginFailure(
+      admission.reservation,
+      dependencies.rateLimitRpc,
+      dependencies.now(),
+    );
+    if (phoneFailureCount >= PUBLIC_RATE_LIMIT_FAILURE_THRESHOLD) {
+      await bestEffortRateLimitAudit(dependencies);
+      return rateLimitedResponse();
+    }
     await auditFailedLogin(dependencies, "invalid_credentials");
     invalidLogin();
   }
@@ -389,12 +432,26 @@ async function postSession(
   ) {
     const results = await Promise.allSettled([
       dependencies.revokeAccessToken(login.accessToken),
-      recordLoginFailures(targets, dependencies.rateLimitRpc, now),
+      finalizeLoginFailure(
+        admission.reservation,
+        dependencies.rateLimitRpc,
+        dependencies.now(),
+      ),
     ]);
-    await auditFailedLogin(dependencies, "invalid_credentials");
-    if (results.some((result) => result.status === "rejected")) {
+    const [revocationResult, finalizationResult] = results;
+    if (
+      revocationResult.status === "rejected" ||
+      finalizationResult.status === "rejected"
+    ) {
+      await auditFailedLogin(dependencies, "invalid_credentials");
       throw new HttpError(503, "登录服务暂不可用");
     }
+    const phoneFailureCount = finalizationResult.value;
+    if (phoneFailureCount >= PUBLIC_RATE_LIMIT_FAILURE_THRESHOLD) {
+      await bestEffortRateLimitAudit(dependencies);
+      return rateLimitedResponse();
+    }
+    await auditFailedLogin(dependencies, "invalid_credentials");
     invalidLogin();
   }
 
@@ -403,7 +460,11 @@ async function postSession(
     refreshToken: login.refreshToken,
   });
   try {
-    await clearLoginIdentityLimits(targets, dependencies.rateLimitRpc);
+    await finalizeLoginSuccess(
+      admission.reservation,
+      dependencies.rateLimitRpc,
+      dependencies.now(),
+    );
     await dependencies.writeAudit({
       action: "session.login",
       actorUserId: profile.userId,
@@ -438,10 +499,10 @@ async function getCurrentSession(
 async function deleteSession(
   request: Request,
   dependencies: SessionRouteDependencies,
+  headers: Headers,
 ): Promise<Response> {
-  const headers = new Headers();
   try {
-    await dependencies.revokeSession(request, headers);
+    await dependencies.revokeSession(request);
     await dependencies.writeAudit({
       action: "session.logout",
       result: true,
@@ -468,17 +529,26 @@ export async function handleSessionRequest(
   env: Env,
   injectedDependencies?: SessionRouteDependencies,
 ): Promise<Response> {
+  const logoutHeaders =
+    request.method.toUpperCase() === "DELETE" ? new Headers() : undefined;
+  if (logoutHeaders !== undefined) {
+    appendSessionCookies(logoutHeaders, clearSessionCookieHeaders());
+  }
   try {
     const config = requireEnv(env);
     requireSameOrigin(request, config.siteOrigin);
-    const dependencies = injectedDependencies ?? defaultDependencies(env);
+    const dependencies = injectedDependencies ?? defaultDependencies(env, config);
     switch (request.method.toUpperCase()) {
       case "GET":
         return await getCurrentSession(request, dependencies);
       case "POST":
         return await postSession(request, config, dependencies);
-      case "DELETE":
-        return await deleteSession(request, dependencies);
+      case "DELETE": {
+        if (logoutHeaders === undefined) {
+          throw new HttpError(500, "服务器暂不可用");
+        }
+        return await deleteSession(request, dependencies, logoutHeaders);
+      }
       default:
         return json(
           { error: "请求方法不允许" },
@@ -486,7 +556,7 @@ export async function handleSessionRequest(
         );
     }
   } catch (error) {
-    return responseForError(error);
+    return responseForError(error, logoutHeaders);
   }
 }
 

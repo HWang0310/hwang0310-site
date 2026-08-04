@@ -1,5 +1,5 @@
 import type { AppRole } from "../../shared/income-forecast/contracts";
-import { type Env, requireEnv } from "./env";
+import { type Env, requireEnv, type RuntimeConfig } from "./env";
 import { HttpError, requireSameOrigin } from "./http";
 import {
   createPublicSupabaseClient,
@@ -229,24 +229,71 @@ function defaultDependencies(env: Env): DefaultSessionDependencies {
   };
 }
 
+export function createRevokeSessionDependencies(
+  config: RuntimeConfig,
+): RevokeSessionDependencies {
+  const publicClient = createPublicSupabaseClient(config);
+  const serviceClient = createServiceRoleSupabaseClient(config);
+  return {
+    async refreshSession(refreshToken) {
+      try {
+        const response = await publicClient.auth.refreshSession({
+          refresh_token: refreshToken,
+        });
+        if (response.error !== null) {
+          if ((response.error.status ?? 500) >= 500) {
+            throw new HttpError(503, "登录服务暂不可用");
+          }
+          return null;
+        }
+        const session = response.data.session;
+        return session === null
+          ? null
+          : {
+              accessToken: session.access_token,
+              refreshToken: session.refresh_token,
+            };
+      } catch {
+        throw new HttpError(503, "登录服务暂不可用");
+      }
+    },
+
+    async revokeAccessToken(accessToken) {
+      try {
+        const response = await serviceClient.auth.admin.signOut(
+          accessToken,
+          "local",
+        );
+        const status = response.error?.status;
+        if (
+          response.error !== null &&
+          status !== 401 &&
+          status !== 403 &&
+          status !== 404
+        ) {
+          throw new HttpError(503, "登录服务暂不可用");
+        }
+      } catch {
+        throw new HttpError(503, "登录服务暂不可用");
+      }
+    },
+  };
+}
+
 export async function revokeSession(
   request: Request,
-  env: Env,
-  responseHeaders: Headers,
-  dependencies?: RevokeSessionDependencies,
+  siteOrigin: string,
+  dependencies: RevokeSessionDependencies,
 ): Promise<void> {
-  const config = requireEnv(env);
-  requireSameOrigin(request, config.siteOrigin);
-  appendSessionCookies(responseHeaders, clearSessionCookieHeaders());
+  requireSameOrigin(request, siteOrigin);
 
   const cookies = readAuthCookies(request);
   if (cookies.accessToken === null && cookies.refreshToken === null) return;
-  const revokeDependencies = dependencies ?? defaultDependencies(env);
 
   try {
     let accessToken = cookies.accessToken;
     if (cookies.refreshToken !== null) {
-      const refreshed = await revokeDependencies.refreshSession(
+      const refreshed = await dependencies.refreshSession(
         cookies.refreshToken,
       );
       if (refreshed !== null) {
@@ -254,7 +301,7 @@ export async function revokeSession(
       }
     }
     if (accessToken !== null) {
-      await revokeDependencies.revokeAccessToken(accessToken);
+      await dependencies.revokeAccessToken(accessToken);
     }
   } catch {
     throw new HttpError(503, "登录服务暂不可用");

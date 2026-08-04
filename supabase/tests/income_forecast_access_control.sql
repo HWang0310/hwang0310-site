@@ -2,12 +2,13 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(65);
+select plan(86);
 
 select has_table('public', 'profiles', 'profiles table exists');
 select has_table('public', 'reports', 'reports table exists');
 select has_table('public', 'audit_events', 'audit_events table exists');
 select has_table('public', 'rate_limits', 'rate_limits table exists');
+select has_table('public', 'rate_limit_reservations', 'rate_limit_reservations table exists');
 
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.profiles'::regclass),
@@ -24,6 +25,10 @@ select ok(
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.rate_limits'::regclass),
   'rate_limits has RLS enabled'
+);
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.rate_limit_reservations'::regclass),
+  'rate_limit_reservations has RLS enabled'
 );
 
 select ok(
@@ -78,6 +83,19 @@ select ok(
   ),
   'rate_limits is available only to service_role'
 );
+select ok(
+  not exists (
+    select 1
+    from unnest(array['anon', 'authenticated']) as role_name
+    cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+    where has_table_privilege(role_name, 'public.rate_limit_reservations', privilege_name)
+  )
+  and (
+    select bool_and(has_table_privilege('service_role', 'public.rate_limit_reservations', privilege_name))
+    from unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) as privilege_name
+  ),
+  'rate_limit_reservations is available only to service_role'
+);
 
 select ok(
   to_regprocedure('public.check_rate_limit(text,text,integer,integer,integer,timestamp with time zone)') is not null,
@@ -90,6 +108,14 @@ select ok(
 select ok(
   to_regprocedure('public.clear_rate_limit(text,text)') is not null,
   'clear_rate_limit RPC exists'
+);
+select ok(
+  to_regprocedure('public.reserve_rate_limit_attempt(uuid,text,text,integer,integer,integer,timestamp with time zone)') is not null,
+  'reserve_rate_limit_attempt RPC exists'
+);
+select ok(
+  to_regprocedure('public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)') is not null,
+  'finalize_rate_limit_attempt RPC exists'
 );
 select ok(
   to_regprocedure('public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)') is not null,
@@ -110,6 +136,16 @@ select is(
   (select prosecdef from pg_proc where oid = 'public.clear_rate_limit(text,text)'::regprocedure),
   false,
   'clear_rate_limit uses security invoker'
+);
+select is(
+  (select prosecdef from pg_proc where oid = 'public.reserve_rate_limit_attempt(uuid,text,text,integer,integer,integer,timestamp with time zone)'::regprocedure),
+  false,
+  'reserve_rate_limit_attempt uses security invoker'
+);
+select is(
+  (select prosecdef from pg_proc where oid = 'public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)'::regprocedure),
+  false,
+  'finalize_rate_limit_attempt uses security invoker'
 );
 select is(
   (select prosecdef from pg_proc where oid = 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)'::regprocedure),
@@ -134,6 +170,18 @@ select ok(
   and not has_function_privilege('authenticated', 'public.clear_rate_limit(text,text)', 'EXECUTE')
   and has_function_privilege('service_role', 'public.clear_rate_limit(text,text)', 'EXECUTE'),
   'only service_role can execute clear_rate_limit'
+);
+select ok(
+  not has_function_privilege('anon', 'public.reserve_rate_limit_attempt(uuid,text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.reserve_rate_limit_attempt(uuid,text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.reserve_rate_limit_attempt(uuid,text,text,integer,integer,integer,timestamp with time zone)', 'EXECUTE'),
+  'only service_role can execute reserve_rate_limit_attempt'
+);
+select ok(
+  not has_function_privilege('anon', 'public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)', 'EXECUTE')
+  and has_function_privilege('service_role', 'public.finalize_rate_limit_attempt(uuid,text,text,text,timestamp with time zone)', 'EXECUTE'),
+  'only service_role can execute finalize_rate_limit_attempt'
 );
 select ok(
   not has_function_privilege('anon', 'public.finalize_report_publish(date,text,uuid,text,bigint,integer,date[],uuid,timestamp with time zone,jsonb)', 'EXECUTE')
@@ -361,6 +409,147 @@ select is(
   'a cleared phone limit is no longer blocked'
 );
 
+insert into public.rate_limits (
+  limit_key,
+  action,
+  window_started_at,
+  failure_count,
+  pending_count,
+  blocked_until,
+  updated_at
+)
+values (
+  'atomic-phone-key',
+  'login_phone',
+  timestamptz '2026-08-04 00:00:00+00',
+  9,
+  0,
+  null,
+  timestamptz '2026-08-04 00:00:00+00'
+);
+
+select ok(
+  (select is_reserved from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000001',
+    'atomic-phone-key',
+    'login_phone',
+    300,
+    10,
+    300,
+    timestamptz '2026-08-04 00:04:00+00'
+  )),
+  'the boundary slot is atomically reserved before authentication'
+);
+select is(
+  (select pending_count from public.rate_limits
+    where limit_key = 'atomic-phone-key' and action = 'login_phone'),
+  1,
+  'the atomic reservation is counted while authentication is pending'
+);
+select ok(
+  (select is_blocked from public.reserve_rate_limit_attempt(
+    '00000000-0000-4000-8000-000000000002',
+    'atomic-phone-key',
+    'login_phone',
+    300,
+    10,
+    300,
+    timestamptz '2026-08-04 00:04:00+00'
+  )),
+  'a second reservation at the boundary is blocked'
+);
+select is(
+  (select blocked_until from public.rate_limits
+    where limit_key = 'atomic-phone-key' and action = 'login_phone'),
+  timestamptz '2026-08-04 00:09:00+00',
+  'the concurrent boundary block lasts a complete five minutes'
+);
+select results_eq(
+  $test$
+    select applied, failure_count, pending_count
+    from public.finalize_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000001',
+      'atomic-phone-key',
+      'login_phone',
+      'failure',
+      timestamptz '2026-08-04 00:04:01+00'
+    )
+  $test$,
+  $test$values (true, 10, 0)$test$,
+  'a failed authentication commits exactly one reserved failure'
+);
+select results_eq(
+  $test$
+    select applied, failure_count, pending_count
+    from public.finalize_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000001',
+      'atomic-phone-key',
+      'login_phone',
+      'failure',
+      timestamptz '2026-08-04 00:04:02+00'
+    )
+  $test$,
+  $test$values (false, 10, 0)$test$,
+  'finalizing a reservation twice is idempotent'
+);
+select ok(
+  (select pending_count >= 0 from public.rate_limits
+    where limit_key = 'atomic-phone-key' and action = 'login_phone'),
+  'idempotent finalization never produces a negative pending count'
+);
+
+select lives_ok(
+  $test$
+    select * from public.reserve_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000003',
+      'stale-phone-key',
+      'login_phone',
+      300,
+      10,
+      300,
+      timestamptz '2026-08-04 10:00:00+00'
+    );
+    select * from public.reserve_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000004',
+      'stale-phone-key',
+      'login_phone',
+      300,
+      10,
+      300,
+      timestamptz '2026-08-04 10:06:00+00'
+    )
+  $test$,
+  'a new window replaces stale reservations and admits a new attempt'
+);
+select results_eq(
+  $test$
+    select applied, failure_count, pending_count
+    from public.finalize_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000003',
+      'stale-phone-key',
+      'login_phone',
+      'release',
+      timestamptz '2026-08-04 10:06:01+00'
+    )
+  $test$,
+  $test$values (false, 0, 1)$test$,
+  'stale finalization does not decrement the current window'
+);
+select results_eq(
+  $test$
+    select applied, failure_count, pending_count
+    from public.finalize_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000004',
+      'stale-phone-key',
+      'login_phone',
+      'release',
+      timestamptz '2026-08-04 10:06:02+00'
+    )
+  $test$,
+  $test$values (true, 0, 0)$test$,
+  'the current reservation releases without leaving pending state'
+);
+
 insert into public.reports (
   report_date,
   title,
@@ -526,6 +715,21 @@ select throws_like(
   '%permission denied for function check_rate_limit%',
   'anon cannot execute the security-invoker rate-limit RPC'
 );
+select throws_like(
+  $test$
+    select * from public.reserve_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000005',
+      'anon-key',
+      'login_phone',
+      300,
+      10,
+      300,
+      timestamptz '2026-08-04 03:00:00+00'
+    )
+  $test$,
+  '%permission denied for function reserve_rate_limit_attempt%',
+  'anon cannot execute the atomic reservation RPC'
+);
 
 reset role;
 
@@ -539,6 +743,19 @@ select throws_like(
   $test$,
   '%permission denied for function check_rate_limit%',
   'authenticated cannot execute the security-invoker rate-limit RPC'
+);
+select throws_like(
+  $test$
+    select * from public.finalize_rate_limit_attempt(
+      '00000000-0000-4000-8000-000000000005',
+      'authenticated-key',
+      'login_phone',
+      'release',
+      timestamptz '2026-08-04 03:00:00+00'
+    )
+  $test$,
+  '%permission denied for function finalize_rate_limit_attempt%',
+  'authenticated cannot execute the atomic finalization RPC'
 );
 
 reset role;

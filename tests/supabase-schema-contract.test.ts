@@ -16,8 +16,10 @@ describe("income forecast access-control migration", () => {
       "create table public.reports",
       "create table public.audit_events",
       "create table public.rate_limits",
+      "create table public.rate_limit_reservations",
       "enable row level security",
-      "record_rate_limit_failure",
+      "reserve_rate_limit_attempt",
+      "finalize_rate_limit_attempt",
       "finalize_report_publish",
       "2026-07-20",
       "2026-07-25",
@@ -41,8 +43,11 @@ describe("income forecast access-control migration", () => {
     ).toLowerCase();
 
     for (const required of [
-      "create function public.check_rate_limit(\n  p_limit_key text,\n  p_action text,\n  p_window_seconds integer,\n  p_max_failures integer,\n  p_block_seconds integer",
-      "pg_advisory_xact_lock",
+      "pending_count integer not null default 0 check (pending_count >= 0)",
+      "create function public.reserve_rate_limit_attempt(\n  p_reservation_id uuid,\n  p_limit_key text,\n  p_action text,\n  p_window_seconds integer,\n  p_max_failures integer,\n  p_block_seconds integer",
+      "create function public.finalize_rate_limit_attempt(\n  p_reservation_id uuid,\n  p_limit_key text,\n  p_action text,\n  p_outcome text",
+      "for update",
+      "greatest(current_limit.pending_count - 1, 0)",
       "with cleaned_reports as (",
       "visibility = 'private'\n      and status = 'online'\n      and not pinned",
     ]) {
@@ -59,6 +64,9 @@ describe("income forecast access-control migration", () => {
       "set local role authenticated",
       "audit_events_actor_user_id_fkey",
       "timestamptz '2026-08-04 00:09:00+00'",
+      "a second reservation at the boundary is blocked",
+      "finalizing a reservation twice is idempotent",
+      "stale finalization does not decrement the current window",
       "whole finalize_report_publish call rolls back",
     ]) {
       expect(pgTap).toContain(required);

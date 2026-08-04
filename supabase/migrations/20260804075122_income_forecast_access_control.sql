@@ -55,9 +55,22 @@ create table public.rate_limits (
   action text not null check (btrim(action) <> ''),
   window_started_at timestamptz not null,
   failure_count integer not null default 0 check (failure_count >= 0),
+  pending_count integer not null default 0 check (pending_count >= 0),
   blocked_until timestamptz,
   updated_at timestamptz not null default now(),
   primary key (limit_key, action)
+);
+
+create table public.rate_limit_reservations (
+  reservation_id uuid not null,
+  limit_key text not null,
+  action text not null,
+  window_started_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  primary key (reservation_id, limit_key, action),
+  foreign key (limit_key, action)
+    references public.rate_limits(limit_key, action)
+    on delete cascade
 );
 
 create index reports_online_report_date_idx
@@ -74,6 +87,9 @@ create index audit_events_created_at_idx
 create index rate_limits_blocked_until_idx
   on public.rate_limits (blocked_until)
   where blocked_until is not null;
+
+create index rate_limit_reservations_limit_idx
+  on public.rate_limit_reservations (limit_key, action, window_started_at);
 
 create function public.set_income_forecast_updated_at()
 returns trigger
@@ -319,6 +335,250 @@ as $$
     and action = p_action;
 $$;
 
+create function public.reserve_rate_limit_attempt(
+  p_reservation_id uuid,
+  p_limit_key text,
+  p_action text,
+  p_window_seconds integer,
+  p_max_failures integer,
+  p_block_seconds integer,
+  p_now timestamptz default now()
+)
+returns table (
+  is_reserved boolean,
+  is_blocked boolean,
+  blocked_until timestamptz,
+  failure_count integer
+)
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_window_started_at timestamptz;
+  v_failure_count integer;
+  v_pending_count integer;
+  v_blocked_until timestamptz;
+  v_inserted_count integer;
+begin
+  if p_reservation_id is null
+    or nullif(btrim(p_limit_key), '') is null
+    or nullif(btrim(p_action), '') is null
+    or p_window_seconds is null
+    or p_window_seconds <= 0
+    or p_max_failures is null
+    or p_max_failures <= 0
+    or p_block_seconds is null
+    or p_block_seconds <= 0
+    or p_now is null
+  then
+    raise exception using
+      errcode = '22023',
+      message = 'rate limit reservation parameters must be non-empty and positive';
+  end if;
+
+  insert into public.rate_limits (
+    limit_key,
+    action,
+    window_started_at,
+    failure_count,
+    pending_count,
+    blocked_until,
+    updated_at
+  )
+  values (p_limit_key, p_action, p_now, 0, 0, null, p_now)
+  on conflict (limit_key, action) do nothing;
+
+  select
+    current_limit.window_started_at,
+    current_limit.failure_count,
+    current_limit.pending_count,
+    current_limit.blocked_until
+  into
+    v_window_started_at,
+    v_failure_count,
+    v_pending_count,
+    v_blocked_until
+  from public.rate_limits as current_limit
+  where current_limit.limit_key = p_limit_key
+    and current_limit.action = p_action
+  for update;
+
+  if (v_blocked_until is not null and v_blocked_until <= p_now)
+    or v_window_started_at + make_interval(secs => p_window_seconds) <= p_now
+  then
+    delete from public.rate_limit_reservations as reservation
+    where reservation.limit_key = p_limit_key
+      and reservation.action = p_action;
+
+    update public.rate_limits as current_limit
+    set
+      window_started_at = p_now,
+      failure_count = 0,
+      pending_count = 0,
+      blocked_until = null,
+      updated_at = p_now
+    where current_limit.limit_key = p_limit_key
+      and current_limit.action = p_action;
+
+    v_window_started_at := p_now;
+    v_failure_count := 0;
+    v_pending_count := 0;
+    v_blocked_until := null;
+  end if;
+
+  if exists (
+    select 1
+    from public.rate_limit_reservations as reservation
+    where reservation.reservation_id = p_reservation_id
+      and reservation.limit_key = p_limit_key
+      and reservation.action = p_action
+      and reservation.window_started_at = v_window_started_at
+  ) then
+    return query select true, false, null::timestamptz, v_failure_count;
+    return;
+  end if;
+
+  if v_blocked_until > p_now then
+    return query select false, true, v_blocked_until, v_failure_count;
+    return;
+  end if;
+
+  if v_failure_count + v_pending_count >= p_max_failures then
+    v_blocked_until := p_now + make_interval(secs => p_block_seconds);
+    update public.rate_limits as current_limit
+    set blocked_until = v_blocked_until, updated_at = p_now
+    where current_limit.limit_key = p_limit_key
+      and current_limit.action = p_action;
+    return query select false, true, v_blocked_until, v_failure_count;
+    return;
+  end if;
+
+  insert into public.rate_limit_reservations (
+    reservation_id,
+    limit_key,
+    action,
+    window_started_at,
+    created_at
+  )
+  values (
+    p_reservation_id,
+    p_limit_key,
+    p_action,
+    v_window_started_at,
+    p_now
+  )
+  on conflict (reservation_id, limit_key, action) do nothing;
+  get diagnostics v_inserted_count = row_count;
+
+  if v_inserted_count <> 1 then
+    raise exception using
+      errcode = '40001',
+      message = 'rate limit reservation could not be created';
+  end if;
+
+  update public.rate_limits as current_limit
+  set
+    pending_count = current_limit.pending_count + 1,
+    updated_at = p_now
+  where current_limit.limit_key = p_limit_key
+    and current_limit.action = p_action;
+
+  return query select true, false, null::timestamptz, v_failure_count;
+end;
+$$;
+
+create function public.finalize_rate_limit_attempt(
+  p_reservation_id uuid,
+  p_limit_key text,
+  p_action text,
+  p_outcome text,
+  p_now timestamptz default now()
+)
+returns table (
+  applied boolean,
+  failure_count integer,
+  pending_count integer
+)
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_current_window timestamptz;
+  v_reservation_window timestamptz;
+  v_failure_count integer;
+  v_pending_count integer;
+begin
+  if p_reservation_id is null
+    or nullif(btrim(p_limit_key), '') is null
+    or nullif(btrim(p_action), '') is null
+    or p_outcome is null
+    or p_outcome not in ('failure', 'release', 'success_clear')
+    or p_now is null
+  then
+    raise exception using
+      errcode = '22023',
+      message = 'invalid rate limit finalization parameters';
+  end if;
+
+  select current_limit.window_started_at
+  into v_current_window
+  from public.rate_limits as current_limit
+  where current_limit.limit_key = p_limit_key
+    and current_limit.action = p_action
+  for update;
+
+  if not found then
+    return query select false, 0, 0;
+    return;
+  end if;
+
+  delete from public.rate_limit_reservations as reservation
+  where reservation.reservation_id = p_reservation_id
+    and reservation.limit_key = p_limit_key
+    and reservation.action = p_action
+  returning reservation.window_started_at into v_reservation_window;
+
+  if not found then
+    select current_limit.failure_count, current_limit.pending_count
+    into v_failure_count, v_pending_count
+    from public.rate_limits as current_limit
+    where current_limit.limit_key = p_limit_key
+      and current_limit.action = p_action;
+    return query select false, v_failure_count, v_pending_count;
+    return;
+  end if;
+
+  update public.rate_limits as current_limit
+  set
+    pending_count = case
+      when v_reservation_window = v_current_window
+        then greatest(current_limit.pending_count - 1, 0)
+      else current_limit.pending_count
+    end,
+    failure_count = case
+      when p_outcome = 'success_clear' then 0
+      when p_outcome = 'failure' and v_reservation_window = v_current_window
+        then current_limit.failure_count + 1
+      else current_limit.failure_count
+    end,
+    blocked_until = case
+      when p_outcome = 'success_clear' then null
+      else current_limit.blocked_until
+    end,
+    updated_at = p_now
+  where current_limit.limit_key = p_limit_key
+    and current_limit.action = p_action
+  returning current_limit.failure_count, current_limit.pending_count
+  into v_failure_count, v_pending_count;
+
+  return query select true, v_failure_count, v_pending_count;
+end;
+$$;
+
 create function public.finalize_report_publish(
   p_report_date date,
   p_title text,
@@ -477,16 +737,19 @@ alter table public.profiles enable row level security;
 alter table public.reports enable row level security;
 alter table public.audit_events enable row level security;
 alter table public.rate_limits enable row level security;
+alter table public.rate_limit_reservations enable row level security;
 
 revoke all on table public.profiles from public, anon, authenticated, service_role;
 revoke all on table public.reports from public, anon, authenticated, service_role;
 revoke all on table public.audit_events from public, anon, authenticated, service_role;
 revoke all on table public.rate_limits from public, anon, authenticated, service_role;
+revoke all on table public.rate_limit_reservations from public, anon, authenticated, service_role;
 
 grant select, insert, update, delete on table public.profiles to service_role;
 grant select, insert, update, delete on table public.reports to service_role;
 grant select, insert on table public.audit_events to service_role;
 grant select, insert, update, delete on table public.rate_limits to service_role;
+grant select, insert, update, delete on table public.rate_limit_reservations to service_role;
 
 revoke all on sequence public.audit_events_id_seq from public, anon, authenticated, service_role;
 grant usage, select on sequence public.audit_events_id_seq to service_role;
@@ -504,9 +767,13 @@ revoke all on function public.protect_public_income_reports() from public, anon,
 revoke all on function public.check_rate_limit(text, text, integer, integer, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.record_rate_limit_failure(text, text, integer, integer, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.clear_rate_limit(text, text) from public, anon, authenticated, service_role;
+revoke all on function public.reserve_rate_limit_attempt(uuid, text, text, integer, integer, integer, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.finalize_rate_limit_attempt(uuid, text, text, text, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.finalize_report_publish(date, text, uuid, text, bigint, integer, date[], uuid, timestamptz, jsonb) from public, anon, authenticated, service_role;
 
 grant execute on function public.check_rate_limit(text, text, integer, integer, integer, timestamptz) to service_role;
 grant execute on function public.record_rate_limit_failure(text, text, integer, integer, integer, timestamptz) to service_role;
 grant execute on function public.clear_rate_limit(text, text) to service_role;
+grant execute on function public.reserve_rate_limit_attempt(uuid, text, text, integer, integer, integer, timestamptz) to service_role;
+grant execute on function public.finalize_rate_limit_attempt(uuid, text, text, text, timestamptz) to service_role;
 grant execute on function public.finalize_report_publish(date, text, uuid, text, bigint, integer, date[], uuid, timestamptz, jsonb) to service_role;

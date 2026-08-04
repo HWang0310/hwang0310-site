@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { AuditEventInput } from "../functions/_lib/audit";
 import type { Env } from "../functions/_lib/env";
 import type {
-  RateLimitCheckArgs,
-  RateLimitClearArgs,
-  RateLimitFailureArgs,
+  RateLimitFinalizeArgs,
+  RateLimitReservationArgs,
   RateLimitRpc,
   RateLimitRpcResponse,
 } from "../functions/_lib/rate-limit";
@@ -49,11 +48,17 @@ function rpcResponse<T>(data: T): RateLimitRpcResponse<T> {
 }
 
 const allowingRpc: RateLimitRpc = {
-  checkRateLimit: async (_args: RateLimitCheckArgs) =>
-    rpcResponse([{ is_blocked: false, blocked_until: null, failure_count: 0 }]),
-  recordRateLimitFailure: async (_args: RateLimitFailureArgs) =>
-    rpcResponse([{ failure_count: 1, blocked_until: null, is_blocked: false }]),
-  clearRateLimit: async (_args: RateLimitClearArgs) => rpcResponse(null),
+  reserveRateLimitAttempt: async (_args: RateLimitReservationArgs) =>
+    rpcResponse([
+      {
+        is_reserved: true,
+        is_blocked: false,
+        blocked_until: null,
+        failure_count: 0,
+      },
+    ]),
+  finalizeRateLimitAttempt: async (_args: RateLimitFinalizeArgs) =>
+    rpcResponse([{ applied: true, failure_count: 0, pending_count: 0 }]),
 };
 
 const profile: ProfileRecord = {
@@ -99,9 +104,7 @@ function dependencies(overrides: Partial<SessionRouteDependencies> = {}) {
     signInWithPassword: async () => loginResult,
     getSession: async () => null,
     revokeAccessToken: async () => undefined,
-    revokeSession: async (_request, headers) => {
-      headers.set("X-Test-Logout", "done");
-    },
+    revokeSession: async () => undefined,
     writeAudit: async (event) => {
       audits.push(event);
     },
@@ -279,16 +282,8 @@ describe("income forecast session route", () => {
   it("DELETE revokes the local session and clears both cookies", async () => {
     let revoked = 0;
     const setup = dependencies({
-      revokeSession: async (_request, headers) => {
+      revokeSession: async () => {
         revoked += 1;
-        headers.append(
-          "Set-Cookie",
-          "if_access=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
-        );
-        headers.append(
-          "Set-Cookie",
-          "if_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
-        );
       },
     });
     const response = await handleSessionRequest(
@@ -338,8 +333,7 @@ describe("income forecast session route", () => {
     expect(sessionCalls).toBe(0);
   });
 
-  it("the token-safe revocation helper clears cookies even when remote revocation fails", async () => {
-    const headers = new Headers();
+  it("the token-safe revocation helper reports remote revocation failure without exposing tokens", async () => {
     const request = new Request(
       "https://hwang0310.dpdns.org/projects/income-forecast/api/session",
       {
@@ -352,7 +346,7 @@ describe("income forecast session route", () => {
     );
 
     await expect(
-      revokeSession(request, env, headers, {
+      revokeSession(request, env.SITE_ORIGIN, {
         refreshSession: async () => ({
           accessToken: "rotated-private-access",
           refreshToken: "rotated-private-refresh",
@@ -362,18 +356,12 @@ describe("income forecast session route", () => {
         },
       }),
     ).rejects.toMatchObject({ status: 503 });
-    expect(headers.getSetCookie()).toEqual([
-      "if_access=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
-      "if_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
-    ]);
-    expect(JSON.stringify(headers)).not.toContain("private-access");
-    expect(JSON.stringify(headers)).not.toContain("private-refresh");
   });
 
   it("DELETE keeps cleared cookies and writes a safe failed audit when revocation fails", async () => {
     const setup = dependencies({
-      revokeSession: (request, headers) =>
-        revokeSession(request, env, headers, {
+      revokeSession: (request) =>
+        revokeSession(request, env.SITE_ORIGIN, {
           refreshSession: async () => ({
             accessToken: "rotated-private-access",
             refreshToken: "rotated-private-refresh",
@@ -414,5 +402,59 @@ describe("income forecast session route", () => {
     const serialized = `${await response.text()}${JSON.stringify(setup.audits)}`;
     expect(serialized).not.toContain("private-access");
     expect(serialized).not.toContain("private-refresh");
+  });
+
+  it.each([
+    "SUPABASE_URL",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "RATE_LIMIT_HMAC_SECRET",
+    "SITE_ORIGIN",
+    "SUPABASE_STORAGE_BUCKET",
+    "ASSETS",
+  ] as const)("DELETE clears both cookies when %s is unavailable", async (key) => {
+    const brokenEnv = { ...env };
+    if (key === "ASSETS") {
+      Object.assign(brokenEnv, { ASSETS: undefined });
+    } else {
+      Object.assign(brokenEnv, { [key]: "" });
+    }
+
+    const response = await handleSessionRequest(
+      new Request(
+        "https://hwang0310.dpdns.org/projects/income-forecast/api/session",
+        { method: "DELETE", headers: { Origin: env.SITE_ORIGIN } },
+      ),
+      brokenEnv,
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.getSetCookie()).toEqual([
+      "if_access=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
+      "if_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
+    ]);
+  });
+
+  it("DELETE keeps both clear-cookie headers when the audit write fails", async () => {
+    const setup = dependencies({
+      revokeSession: async () => undefined,
+      writeAudit: async () => {
+        throw new Error("audit unavailable");
+      },
+    });
+    const response = await handleSessionRequest(
+      new Request(
+        "https://hwang0310.dpdns.org/projects/income-forecast/api/session",
+        { method: "DELETE", headers: { Origin: env.SITE_ORIGIN } },
+      ),
+      env,
+      setup.deps,
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.getSetCookie()).toEqual([
+      "if_access=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
+      "if_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
+    ]);
   });
 });
