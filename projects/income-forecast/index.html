@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="湖北电信收入预估历史报告入口" />
+    <meta name="theme-color" content="#081625" />
+    <title>湖北电信收入预估报告</title>
+    <link rel="stylesheet" href="/src/income-forecast/styles.css" />
+  </head>
+  <body>
+    <a class="if-skip-link" href="#income-main">跳到主要内容</a>
+    <header class="if-header">
+      <div class="if-header-inner">
+        <a class="if-brand" href="/" aria-label="返回王昊个人主页">
+          <span class="if-brand-mark" aria-hidden="true">⌁</span>
+          <span>
+            <strong>湖北电信 · 收入预估</strong>
+            <small>收入预估 · Revenue Forecast</small>
+          </span>
+        </a>
+        <a class="if-home-link" href="/">返回个人主页 <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <main id="income-main" class="if-main">
+      <section class="if-hero" aria-labelledby="income-title">
+        <div class="if-hero-copy">
+          <p class="if-eyebrow">PRIVATE REPORT WORKBENCH <span aria-hidden="true">/</span> 2026</p>
+          <h1 id="income-title">
+            把每一次预测，<br /><em>变成可行动的判断。</em>
+            <span class="if-visually-hidden">选择日期，查看全省及17地市收入预估</span>
+          </h1>
+          <p class="if-lead">
+            报告按月内工作节点持续更新。公开示例可以直接浏览，登录后可按权限查看完整归档，进入报告后还可以点击湖北地图下钻到本地网。
+          </p>
+        </div>
+        <div class="if-hero-note" aria-label="报告工作台说明">
+          <span class="if-note-dot" aria-hidden="true"></span>
+          <span>数据驱动 · 同源安全访问</span>
+        </div>
+      </section>
+
+      <section class="if-panel if-public-panel" aria-labelledby="public-title" data-report-list>
+        <div class="if-panel-heading">
+          <div>
+            <p class="if-eyebrow">OPEN EXAMPLES</p>
+            <h2 id="public-title">公开示例</h2>
+          </div>
+          <p class="if-panel-caption">无需登录 · 永久保留</p>
+        </div>
+        <div class="if-report-grid" data-public-reports>
+          <a class="if-report-card" href="/projects/income-forecast/reports/2026/07/20/">
+            <span class="if-report-index">01</span>
+            <span class="if-report-card-body">
+              <strong>2026 年 7 月 20 日</strong>
+              <small>全省及 17 个地市 · 日常预测</small>
+            </span>
+            <span class="if-report-arrow" aria-hidden="true">↗</span>
+          </a>
+          <a class="if-report-card" href="/projects/income-forecast/reports/2026/07/25/">
+            <span class="if-report-index">02</span>
+            <span class="if-report-card-body">
+              <strong>2026 年 7 月 25 日</strong>
+              <small>全省及 17 个地市 · 最新公开示例</small>
+            </span>
+            <span class="if-report-arrow" aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="if-panel if-login-panel" data-login-panel aria-labelledby="login-title">
+        <div class="if-panel-heading">
+          <div>
+            <p class="if-eyebrow">MEMBER ACCESS</p>
+            <h2 id="login-title">登录查看完整归档</h2>
+          </div>
+          <span class="if-lock" aria-hidden="true">⌑</span>
+        </div>
+        <p class="if-panel-caption if-login-caption">
+          使用清单中的手机号登录。首次登录使用手机号作为初始密码，登录后可在账户菜单中修改。
+        </p>
+        <form class="if-form" data-login-form novalidate>
+          <div class="if-form-grid">
+            <label class="if-field" for="phone">
+              <span>手机号</span>
+              <input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="username" placeholder="请输入 11 位手机号" required maxlength="11" />
+            </label>
+            <label class="if-field" for="password">
+              <span>密码</span>
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required />
+            </label>
+          </div>
+          <div class="if-form-actions">
+            <button class="if-button if-button-primary" type="submit">登录报告中心 <span aria-hidden="true">→</span></button>
+            <button class="if-text-button" type="button" data-forgot-toggle>忘记密码？</button>
+          </div>
+          <p class="if-status" data-login-status aria-live="polite"></p>
+        </form>
+
+        <div class="if-recovery" data-forgot-panel hidden>
+          <div class="if-recovery-heading">
+            <h3>找回密码</h3>
+            <p>输入姓名后，我们会把重置信息发送至登记邮箱。</p>
+          </div>
+          <form class="if-form" data-forgot-form novalidate>
+            <div class="if-form-grid">
+              <label class="if-field">
+                <span>姓名</span>
+                <input name="name" type="text" autocomplete="name" placeholder="请输入清单中的姓名" required maxlength="80" />
+              </label>
+              <label class="if-field" data-employee-suffix-field hidden>
+                <span>工号后四位</span>
+                <input name="employeeSuffix" type="text" inputmode="numeric" autocomplete="off" pattern="[0-9]{4}" maxlength="4" placeholder="同名时填写" />
+              </label>
+            </div>
+            <div class="if-form-actions">
+              <button class="if-button if-button-primary" type="submit">发送重置信息 <span aria-hidden="true">→</span></button>
+              <button class="if-text-button" type="button" data-forgot-close>返回登录</button>
+            </div>
+            <p class="if-status" data-forgot-status aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+
+      <section class="if-panel if-session-panel" data-session-panel hidden aria-labelledby="session-title">
+        <div class="if-panel-heading">
+          <div>
+            <p class="if-eyebrow">SIGNED IN</p>
+            <h2 id="session-title">你好，<span data-session-name>成员</span></h2>
+          </div>
+          <div class="if-session-actions">
+            <button class="if-text-button" type="button" data-change-open>修改密码</button>
+            <button class="if-text-button" type="button" data-logout>退出登录</button>
+          </div>
+        </div>
+
+        <p class="if-notice if-notice-warm" data-initial-notice hidden role="status">
+          当前仍在使用手机号初始密码，建议立即修改；这不会阻止你查看报告。
+        </p>
+        <p class="if-notice if-notice-danger" data-must-change-notice hidden role="alert">
+          请先完成密码修改，完成后才能查看完整归档。
+        </p>
+
+        <section class="if-change-panel" data-change-password hidden aria-labelledby="change-title">
+          <div class="if-recovery-heading">
+            <p class="if-eyebrow">ACCOUNT SECURITY</p>
+            <h3 id="change-title">修改密码</h3>
+            <p>新密码需为 8–72 个 UTF-8 字节。修改成功后会重新建立当前会话。</p>
+          </div>
+          <form class="if-form" data-change-form novalidate>
+            <div class="if-form-grid">
+              <label class="if-field">
+                <span>当前密码</span>
+                <input name="currentPassword" type="password" autocomplete="current-password" required />
+              </label>
+              <label class="if-field">
+                <span>新密码</span>
+                <input name="newPassword" type="password" autocomplete="new-password" minlength="8" required />
+              </label>
+              <label class="if-field">
+                <span>确认新密码</span>
+                <input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
+              </label>
+            </div>
+            <div class="if-form-actions">
+              <button class="if-button if-button-primary" type="submit">保存新密码 <span aria-hidden="true">→</span></button>
+              <button class="if-text-button" type="button" data-change-close>暂不修改</button>
+            </div>
+            <p class="if-status" data-change-status aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="if-authenticated-reports" data-authenticated-reports-area aria-labelledby="archive-title" hidden>
+          <div class="if-panel-heading if-panel-heading-compact">
+            <div>
+              <p class="if-eyebrow">PRIVATE ARCHIVE</p>
+              <h3 id="archive-title">完整报告归档</h3>
+            </div>
+            <p class="if-panel-caption" data-report-count></p>
+          </div>
+          <div class="if-report-grid" data-authenticated-reports></div>
+          <p class="if-status" data-reports-status aria-live="polite"></p>
+        </section>
+      </section>
+
+      <footer class="if-footer">
+        <span>同源访问 · 权限按人员清单管理</span>
+        <a href="/">hwang0310.dpdns.org <span aria-hidden="true">↗</span></a>
+      </footer>
+    </main>
+
+    <script type="module" src="/src/income-forecast/client.ts"></script>
+  </body>
+</html>

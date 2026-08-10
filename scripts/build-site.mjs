@@ -14,6 +14,7 @@ import {
   reportCleanupWarning,
   validateStaticTree,
 } from "./static-tree.mjs";
+import { PUBLIC_REPORT_DATES } from "../shared/income-forecast/contracts.ts";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const defaultProjectDir = dirname(scriptDirectory);
@@ -31,12 +32,23 @@ async function runViteBuild({ projectDir, outDir }) {
   });
 }
 
+function assertDefaultStaticReportDates(dates) {
+  if (
+    dates.length !== PUBLIC_REPORT_DATES.length ||
+    dates.some((date, index) => date !== PUBLIC_REPORT_DATES[index])
+  ) {
+    throw new Error(
+      `Static build must stage only public report dates: ${PUBLIC_REPORT_DATES.join(", ")}`
+    );
+  }
+}
+
 /**
  * @typedef {Object} BuildSiteOptions
  * @property {string} [projectDir]
  * @property {string} [distDir]
  * @property {(options: {projectDir: string, outDir: string}) => Promise<void>} [build]
- * @property {(options: object) => Promise<{files: number, dates: string[]}>} [stage]
+ * @property {(options: {archiveFile: string, reportRoot: string, thesisFile: string, distDir: string}) => Promise<{files: number, dates: string[]}>} [stage]
  * @property {(options: {stagedDir: string, targetDir: string}) => Promise<void>} [swap]
  * @property {typeof rm} [cleanup]
  * @property {(error: unknown, context: string) => void} [onCleanupWarning]
@@ -94,6 +106,9 @@ export async function buildSite(options = {}) {
         ),
       distDir: stagedDist,
     });
+    if (stage === stageStaticAssets) {
+      assertDefaultStaticReportDates(result.dates);
+    }
     await validateStaticTree(stagedDist);
     await swap({ stagedDir: stagedDist, targetDir: distDir });
     committed = true;

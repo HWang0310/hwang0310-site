@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="湖北电信收入预估权限与报告管理后台" />
+    <meta name="theme-color" content="#081625" />
+    <title>管理后台 · 湖北电信收入预估</title>
+    <link rel="stylesheet" href="/src/income-forecast/styles.css" />
+  </head>
+  <body class="if-admin-page">
+    <a class="if-skip-link" href="#admin-main">跳到主要内容</a>
+    <header class="if-header">
+      <div class="if-header-inner">
+        <a class="if-brand" href="/projects/income-forecast/" aria-label="返回收入预估报告入口">
+          <span class="if-brand-mark" aria-hidden="true">⌁</span>
+          <span>
+            <strong>湖北电信 · 管理后台</strong>
+            <small>ACCESS CONTROL · REPORT OPERATIONS</small>
+          </span>
+        </a>
+        <a class="if-home-link" href="/projects/income-forecast/">返回报告入口 <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <main id="admin-main" class="if-main if-admin-main" data-admin-app>
+      <section class="if-hero if-admin-hero" aria-labelledby="admin-title">
+        <div class="if-hero-copy">
+          <p class="if-eyebrow">WANG HAO · ROOT ADMIN <span aria-hidden="true">/</span> CONTROL ROOM</p>
+          <h1 id="admin-title">让每一份报告，<br /><em>只抵达该抵达的人。</em></h1>
+          <p class="if-lead">日常成员权限、报告在线状态、容量清理与审计记录都在这里维护。所有危险操作都会再次提醒，公共示例永久受保护。</p>
+        </div>
+        <div class="if-hero-note" aria-label="管理后台状态">
+          <span class="if-note-dot" aria-hidden="true"></span>
+          <span data-admin-status>正在检查管理员会话……</span>
+        </div>
+      </section>
+
+      <p class="if-status if-admin-status" data-admin-error aria-live="polite"></p>
+
+      <section class="if-admin-grid" aria-label="管理工作区">
+        <section class="if-panel if-admin-section if-admin-users" data-admin-users data-danger-action="true" aria-labelledby="admin-users-title">
+          <div class="if-panel-heading">
+            <div>
+              <p class="if-eyebrow">PEOPLE</p>
+              <h2 id="admin-users-title">人员权限</h2>
+            </div>
+            <span class="if-panel-caption" data-admin-user-count>—</span>
+          </div>
+          <div class="if-admin-table-wrap">
+            <table class="if-admin-table">
+              <thead><tr><th>成员</th><th>联系方式</th><th>角色</th><th>状态</th><th>动作</th></tr></thead>
+              <tbody data-admin-users-body><tr><td colspan="5">正在加载成员……</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="if-panel if-admin-section if-admin-reports" data-admin-reports aria-labelledby="admin-reports-title">
+          <div class="if-panel-heading">
+            <div>
+              <p class="if-eyebrow">REPORTS</p>
+              <h2 id="admin-reports-title">报告在线状态</h2>
+            </div>
+            <span class="if-panel-caption" data-admin-report-count>—</span>
+          </div>
+          <div class="if-admin-report-list" data-admin-reports-body><p class="if-panel-caption">正在加载报告……</p></div>
+        </section>
+
+        <section class="if-panel if-admin-section if-admin-capacity" data-admin-capacity aria-labelledby="admin-capacity-title">
+          <div class="if-panel-heading">
+            <div>
+              <p class="if-eyebrow">STORAGE HEALTH</p>
+              <h2 id="admin-capacity-title">容量与清理</h2>
+            </div>
+            <span class="if-lock" aria-hidden="true">⌑</span>
+          </div>
+          <div class="if-capacity-grid">
+            <div class="if-capacity-card"><span>私有在线报告</span><strong data-capacity-private>—</strong><small>软上限 850 MiB</small></div>
+            <div class="if-capacity-card"><span>全部在线报告</span><strong data-capacity-total>—</strong><small>免费层参考 1 GB</small></div>
+            <div class="if-capacity-card"><span>下一个可清理日期</span><strong data-capacity-next>—</strong><small>仅清理未置顶的私有报告</small></div>
+            <div class="if-capacity-card"><span>最近一次清理</span><strong data-capacity-cleanup>—</strong><small>20260720 / 20260725 永不清理</small></div>
+          </div>
+          <p class="if-panel-caption if-capacity-note">迁移初始口径：Supabase 私有约 1.1 MiB，全部在线约 2.1 MiB；页面数值以实时 API 为准。</p>
+        </section>
+
+        <section class="if-panel if-admin-section if-admin-audit" data-admin-audit aria-labelledby="admin-audit-title">
+          <div class="if-panel-heading">
+            <div>
+              <p class="if-eyebrow">AUDIT TRAIL</p>
+              <h2 id="admin-audit-title">审计记录</h2>
+            </div>
+            <span class="if-panel-caption" data-admin-audit-page>第 1 页</span>
+          </div>
+          <div class="if-admin-table-wrap">
+            <table class="if-admin-table">
+              <thead><tr><th>时间</th><th>动作</th><th>对象</th><th>结果</th></tr></thead>
+              <tbody data-admin-audit-body><tr><td colspan="4">正在加载审计记录……</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <footer class="if-footer">
+        <span>服务端权限校验 · 所有修改均写入审计</span>
+        <a href="/projects/income-forecast/">回到报告入口 <span aria-hidden="true">↗</span></a>
+      </footer>
+    </main>
+    <script type="module" src="/src/income-forecast/admin.ts"></script>
+  </body>
+</html>

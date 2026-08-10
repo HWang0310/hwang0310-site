@@ -48,11 +48,11 @@ describe("buildSite", () => {
       stage: async ({ distDir }) => {
         await mkdir(join(distDir, "assets"), { recursive: true });
         await writeFile(join(distDir, "assets", "paper.pdf"), "paper");
-        return { files: 1, dates: ["20260720"] };
+        return { files: 1, dates: ["20260720", "20260725"] };
       },
     });
 
-    expect(result).toEqual({ files: 1, dates: ["20260720"] });
+    expect(result).toEqual({ files: 1, dates: ["20260720", "20260725"] });
     expect(readFileSync(join(fixture.distDir, "index.html"), "utf8")).toContain(
       "new complete site"
     );
@@ -215,7 +215,7 @@ describe("replaceDirectoryAtomically", () => {
         { stagedDir, targetDir: fixture.distDir },
         {
           rm: async (path, options) => {
-            await rm(join(path, "previous", "old-site.txt"), { force: true });
+            await rm(join(String(path), "previous", "old-site.txt"), { force: true });
             throw new Error("injected partial backup cleanup failure");
           },
           onCleanupWarning: (error) =>

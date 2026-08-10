@@ -28,6 +28,7 @@ import {
   reportCleanupWarning,
   validateStaticTree,
 } from "./static-tree.mjs";
+import { PUBLIC_REPORT_DATES } from "../shared/income-forecast/contracts.ts";
 
 export { validateStaticTree } from "./static-tree.mjs";
 
@@ -158,9 +159,11 @@ async function readArchive(archiveFile) {
   }
 
   const seenDates = new Set();
-  return parsed.map((entry, index) => {
+  const entries = parsed.map((entry, index) => {
     const date = entry?.date;
     const folder = entry?.folder;
+    const visibility = entry?.visibility;
+    const pinned = entry?.pinned;
 
     if (!validateDate(date)) {
       throw new Error(`Invalid report date at archive entry ${index}`);
@@ -177,9 +180,30 @@ async function readArchive(archiveFile) {
     if (seenDates.has(date)) {
       throw new Error(`Duplicate report date in archive: ${date}`);
     }
+    if (visibility !== "public" && visibility !== "private") {
+      throw new Error(`Invalid report visibility at archive entry ${index}`);
+    }
+    if (typeof pinned !== "boolean") {
+      throw new Error(`Invalid report pinned state at archive entry ${index}`);
+    }
     seenDates.add(date);
-    return { date, folder };
+    return { date, folder, visibility, pinned };
   });
+
+  const entriesByDate = new Map(entries.map((entry) => [entry.date, entry]));
+  for (const date of PUBLIC_REPORT_DATES) {
+    const entry = entriesByDate.get(date);
+    if (!entry || entry.visibility !== "public" || !entry.pinned) {
+      throw new Error(`Public report policy requires ${date} to be public and pinned`);
+    }
+  }
+
+  return entries
+    .filter(
+      (entry) =>
+        entry.visibility === "public" && PUBLIC_REPORT_DATES.includes(entry.date)
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 async function prevalidateSources({ archiveFile, reportRoot, thesisFile }) {
