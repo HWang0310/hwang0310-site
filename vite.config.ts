@@ -15,6 +15,10 @@ export default defineConfig({
           projectRoot,
           "projects/income-forecast/reset-password/index.html",
         ),
+        incomeForecastAdmin: resolve(
+          projectRoot,
+          "projects/income-forecast/admin/index.html",
+        ),
       },
     },
   },
