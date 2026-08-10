@@ -120,7 +120,7 @@ function dependencies(overrides: Partial<SessionRouteDependencies> = {}) {
 
 describe("income forecast session route", () => {
   it("logs in with a normalized phone and returns only the safe session response", async () => {
-    let authInput: { phone: string; password: string } | null = null;
+    let authInput: { phone: string; password: string; email?: string } | null = null;
     const setup = dependencies({
       signInWithPassword: async (input) => {
         authInput = input;
@@ -141,6 +141,7 @@ describe("income forecast session route", () => {
     expect(authInput).toEqual({
       phone: "13800000002",
       password: "credential-value",
+      email: "user@example.test",
     });
     const serializedResponse = await response.clone().text();
     expect(await response.json()).toEqual({
