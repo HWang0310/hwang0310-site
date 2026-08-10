@@ -60,3 +60,42 @@ DBeaver 只用于查询和审核 `public` 业务表。不直接插入、更新�
 4. 按时间点查看 Auth Logs 和脱敏审计的 `reason`，区分 Auth、profile、撤销或 SMTP 故障，不从日志复制用户输入。
 
 Supabase Auth access token 在已签发后不能立即从所有节点撤回；全局退出主要撤销 refresh token。敏感操作必须继续服务端验证用户和 profile，并保持较短的 JWT 有效期。
+
+## 私有报告桶与人员清单导入
+
+私有报告桶由 Storage API 幂等初始化，脚本不会直接写 `storage.buckets` 或
+`storage.objects`。先在仓库根目录执行：
+
+```bash
+npm run provision:income
+```
+
+脚本要求 `SUPABASE_URL` 和 `SUPABASE_SERVICE_ROLE_KEY` 来自官方秘密配置；报告桶
+`income-forecast-reports` 保持私有，单文件上限 25 MiB，只允许 HTML、CSS、JavaScript、
+SVG、常用图片和 WOFF/WOFF2。若发现同名公共桶，脚本会安全失败，不会自动改变公开状态。
+
+人员清单导入默认为 Dry Run，默认文件为：
+
+```text
+/Users/hwang/Movies/Program/hwang_sryg/收入预估2.0人员权限清单.xlsx
+```
+
+可显式指定清单路径：
+
+```bash
+npm run import:income-users -- --roster "/path/to/人员权限清单.xlsx"
+```
+
+Dry Run 只显示人数、管理员数和待创建/待更新数量，不访问远端、不输出完整手机号、
+邮箱或密码。表头必须精确为 `姓名/工号/电话号码/邮箱/是否管理员`，工号、手机号和邮箱
+不能重复，且必须有且仅有一名标记为管理员的王昊。确认脱敏预演结果后，才可以加上
+`--apply`：
+
+```bash
+npm run import:income-users -- --roster "/path/to/人员权限清单.xlsx" --apply
+```
+
+`--apply` 会通过 Auth Admin API 创建缺失手机号账号，初始密码仅在 Auth 中设为手机号，
+并用 `app_metadata.role` 写入 `root_admin/admin/user`；已存在账号只同步联系方式和角色，
+绝不重设密码。随后通过 PostgREST `profiles` upsert 业务资料。脚本和清单均不进入 Git，
+Service Role 缺失时在任何远端调用前失败。

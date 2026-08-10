@@ -14,3 +14,4 @@ supabase/.temp/
 .dev.vars
 .env*
 !.env*.example
+*.xlsx

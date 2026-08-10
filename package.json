@@ -15,7 +15,9 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "dev:pages": "npm run build && wrangler pages dev dist",
-    "verify:income": "node scripts/verify-income-forecast-production.mjs"
+    "verify:income": "node scripts/verify-income-forecast-production.mjs",
+    "provision:income": "node scripts/provision-income-forecast.mjs",
+    "import:income-users": "node scripts/import-income-users.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
