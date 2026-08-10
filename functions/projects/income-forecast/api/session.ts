@@ -77,6 +77,7 @@ export type SessionRouteDependencies = {
   signInWithPassword(input: {
     phone: string;
     password: string;
+    email?: string;
   }): Promise<LoginResult | null>;
   getSession(request: Request): Promise<SessionUser | null>;
   revokeAccessToken(accessToken: string): Promise<void>;
@@ -267,7 +268,14 @@ function defaultDependencies(
 
     async signInWithPassword(input) {
       try {
-        const response = await publicClient.auth.signInWithPassword(input);
+        // Supabase phone auth requires a paid SMS-provider configuration.
+        // The roster already contains a confirmed email for every account, so
+        // keep the user-facing identifier as a phone number while authenticating
+        // through the free email/password provider.
+        const response = await publicClient.auth.signInWithPassword({
+          email: input.email ?? input.phone,
+          password: input.password,
+        });
         if (response.error !== null) {
           if ((response.error.status ?? 500) >= 500) {
             throw new HttpError(503, "登录服务暂不可用");
@@ -523,6 +531,7 @@ async function postSession(
     login = await dependencies.signInWithPassword({
       phone,
       password: body.password,
+      email: profile?.email,
     });
   } catch (error) {
     await releaseLoginAttempt(
