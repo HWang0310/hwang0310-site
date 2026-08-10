@@ -28,7 +28,7 @@ type ProfileRow = {
   updated_at: string;
 };
 
-type AuditEventRow = {
+export type AuditEventRow = {
   id: number;
   event_type: string;
   actor_user_id: string | null;

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Env } from "../functions/_lib/env";
@@ -354,6 +356,14 @@ function auditDeps(overrides: Partial<AdminAuditDependencies> = {}): AdminAuditD
 }
 
 describe("income forecast audit administration", () => {
+  it("keeps the production audit adapter structurally typed", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "functions/projects/income-forecast/api/admin/audit.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/\bas\s+any\b|:\s*any\b/u);
+  });
+
   it("sanitizes sensitive audit metadata and bounds pagination", async () => {
     const response = await handleAdminAuditRequest(
       request("/projects/income-forecast/api/admin/audit?page=1&pageSize=50"),

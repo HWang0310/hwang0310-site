@@ -1,7 +1,10 @@
 import type { Env } from "../../../../_lib/env";
 import { type AuditEventInput, writeAudit } from "../../../../_lib/audit";
 import { type SessionUser, getSession } from "../../../../_lib/session";
-import { createServiceRoleSupabaseClient } from "../../../../_lib/supabase";
+import {
+  createServiceRoleSupabaseClient,
+  type AuditEventRow,
+} from "../../../../_lib/supabase";
 import {
   adminErrorResponse,
   ensureAdmin,
@@ -79,7 +82,7 @@ function defaultDependencies(env: Env, config: ReturnType<typeof requireEnv>): A
     async listAudit(query) {
       try {
         const offset = (query.page - 1) * query.pageSize;
-        let builder = (serviceClient as any)
+        let builder = serviceClient
           .from("audit_events")
           .select("id,event_type,actor_user_id,target_type,target_id,success,metadata,created_at", { count: "exact" })
           .order("created_at", { ascending: false })
@@ -90,8 +93,10 @@ function defaultDependencies(env: Env, config: ReturnType<typeof requireEnv>): A
         if (query.success !== undefined) builder = builder.eq("success", query.success);
         const response = await builder;
         if (response.error !== null) throw new Error("audit list failed");
-        const rows = Array.isArray(response.data) ? response.data : [];
-        const events = rows.slice(0, query.pageSize).map((row: any) => ({
+        const rows: readonly AuditEventRow[] = Array.isArray(response.data)
+          ? response.data
+          : [];
+        const events = rows.slice(0, query.pageSize).map((row) => ({
           id: Number(row.id),
           eventType: String(row.event_type),
           actorUserId: typeof row.actor_user_id === "string" ? row.actor_user_id : null,
