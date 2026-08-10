@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import type { AppRole } from "../../shared/income-forecast/contracts";
+import type {
+  AppRole,
+  ReportVisibility,
+} from "../../shared/income-forecast/contracts";
 import type { RuntimeConfig } from "./env";
 
 export type Json =
@@ -36,6 +39,22 @@ type AuditEventRow = {
   created_at: string;
 };
 
+type ReportRow = {
+  report_date: string;
+  title: string;
+  release_id: string | null;
+  storage_prefix: string | null;
+  visibility: ReportVisibility;
+  pinned: boolean;
+  status: "staging" | "online" | "offline";
+  size_bytes: number;
+  file_count: number;
+  published_at: string | null;
+  cleaned_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type IncomeForecastDatabase = {
   public: {
     Tables: {
@@ -54,6 +73,15 @@ export type IncomeForecastDatabase = {
           created_at?: string;
         };
         Update: never;
+        Relationships: [];
+      };
+      reports: {
+        Row: ReportRow;
+        Insert: Omit<ReportRow, "created_at" | "updated_at"> & {
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<ReportRow, "report_date" | "created_at">>;
         Relationships: [];
       };
     };

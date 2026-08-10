@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "include": [
+    "/projects/income-forecast/api/*",
+    "/projects/income-forecast/reports/*"
+  ],
+  "exclude": [
+    "/projects/income-forecast/reports/2026/07/20/*",
+    "/projects/income-forecast/reports/2026/07/25/*"
+  ]
+}
