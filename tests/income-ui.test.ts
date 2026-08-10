@@ -60,6 +60,13 @@ describe("income forecast progressive-enhancement UI", () => {
     expect(externalScripts).toEqual([]);
   });
 
+  it("keeps reset bootstrap independent from the entry session bootstrap", () => {
+    const resetScript = read(resolve("src/income-forecast/reset-password.ts"));
+    expect(resetScript).not.toContain('from "./client"');
+    expect(resetScript).not.toContain("api/session");
+    expect(resetScript).not.toContain("api/reports");
+  });
+
   it("declares mobile-safe layout constraints and reduced-motion support", () => {
     const css = read(resolve("src/income-forecast/styles.css"));
     expect(css).toContain("@media (max-width: 640px)");
@@ -91,5 +98,19 @@ describe("income forecast client policy", () => {
       "/projects/income-forecast/reports/2026/07/25/",
     );
     expect(client.reportPath("20260724")).not.toContain("supabase");
+  });
+});
+
+describe("recovery URL policy", () => {
+  it("keeps the token in memory while removing it from the address target", async () => {
+    const reset = await import("../src/income-forecast/reset-password");
+    const token = "a".repeat(48);
+    expect(reset.extractRecoveryParams(`?token_hash=${token}&type=recovery`)).toEqual({
+      tokenHash: token,
+      valid: true,
+    });
+    expect(reset.recoveryUrlWithoutToken("/projects/income-forecast/reset-password/", "#form")).toBe(
+      "/projects/income-forecast/reset-password/#form",
+    );
   });
 });

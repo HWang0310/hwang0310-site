@@ -1,7 +1,9 @@
 import "./styles.css";
-import { apiRequest, type IncomeSession } from "./client";
-
-const INCOME_ROOT = "/projects/income-forecast/";
+import {
+  apiRequest,
+  INCOME_ROOT,
+  type IncomeSession,
+} from "./income-api";
 
 export type RecoveryParams = Readonly<{
   tokenHash: string | null;
@@ -31,10 +33,18 @@ export function extractRecoveryParams(search: string): RecoveryParams {
 export function clearRecoveryUrl(): void {
   if (typeof window === "undefined") return;
   try {
-    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
+    window.history.replaceState(
+      {},
+      document.title,
+      recoveryUrlWithoutToken(window.location.pathname, window.location.hash),
+    );
   } catch {
     // History is unavailable in some embedded previews; do not expose the token in UI.
   }
+}
+
+export function recoveryUrlWithoutToken(pathname: string, hash = ""): string {
+  return `${pathname}${hash}`;
 }
 
 function setStatus(element: HTMLElement | null, message: string, tone?: "error" | "success"): void {
@@ -75,6 +85,9 @@ export function bootstrapPasswordReset(): void {
     return;
   }
   const tokenHash = params.tokenHash;
+  // Remove the one-time token from browser history immediately. The local
+  // variable above is the only copy retained for the POST that follows.
+  clearRecoveryUrl();
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
