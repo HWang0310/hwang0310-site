@@ -11,6 +11,10 @@ import {
 } from "../../../../_lib/admin";
 import { HttpError, json, requireSameOrigin } from "../../../../_lib/http";
 import { getSession, type SessionUser } from "../../../../_lib/session";
+import {
+  removeReportStorageObjects,
+  type ReportStorageAdapter,
+} from "../../../../_lib/report-storage";
 import { createServiceRoleSupabaseClient } from "../../../../_lib/supabase";
 
 const REPORT_SELECT =
@@ -30,6 +34,11 @@ export function createAdminReportDependencies(
   config: ReturnType<typeof requireEnv>,
 ): AdminReportDependencies {
   const serviceClient = createServiceRoleSupabaseClient(config);
+  const storage = serviceClient.storage.from(config.supabaseStorageBucket);
+  const storageAdapter: ReportStorageAdapter = {
+    list: (path, options) => storage.list(path, options),
+    remove: (paths) => storage.remove(paths),
+  };
   return {
     async requireAdmin(request) {
       const session = await getSession(request, env);
@@ -80,10 +89,7 @@ export function createAdminReportDependencies(
       }
     },
     async removeReportObjects(report) {
-      if (report.storagePrefix === null || report.storagePrefix.length === 0) return;
-      // Storage cleanup is deliberately delegated to the publishing pipeline,
-      // which has the release manifest. The metadata mutation remains safe if
-      // a legacy release has no prefix.
+      await removeReportStorageObjects(report, storageAdapter);
     },
     writeAudit: (event) => writeAudit(env, event),
   };

@@ -62,11 +62,32 @@ export async function handleAdminReportRequest(
       : reports.find((report) => report.reportDate === date) ?? null;
     if (target === null) throw new HttpError(404, "报告不存在");
     const action = actionFromBody(await readAdminJson(request));
+    if (target.visibility !== "private") throw new HttpError(409, "仅私有报告可由管理员下线或置顶");
+    let cleanedAt: string | null = target.cleanedAt;
     if (action.action === "set_pinned") {
       await dependencies.updateReport(date, { pinned: action.pinned });
     } else {
-      await dependencies.updateReport(date, { status: "offline", cleanedAt: new Date().toISOString() });
-      await dependencies.removeReportObjects(target);
+      cleanedAt = new Date().toISOString();
+      try {
+        await dependencies.removeReportObjects(target);
+      } catch (error) {
+        // Keep the failure response generic and record only a stable reason;
+        // the error may contain provider paths or other implementation data.
+        try {
+          await dependencies.writeAudit({
+            action: "admin.report.set_offline",
+            actorUserId: actor.id,
+            targetType: "report",
+            targetId: date,
+            result: false,
+            metadata: { reason: "storage_cleanup_failed" },
+          });
+        } catch {
+          // Preserve the original cleanup failure if the audit sink is down.
+        }
+        throw error;
+      }
+      await dependencies.updateReport(date, { status: "offline", cleanedAt });
     }
     const audit: AuditEventInput = {
       action: `admin.report.${action.action}`,
@@ -81,7 +102,7 @@ export async function handleAdminReportRequest(
       ...target,
       pinned: action.action === "set_pinned" ? action.pinned : target.pinned,
       status: action.action === "set_offline" ? "offline" : target.status,
-      cleanedAt: action.action === "set_offline" ? new Date().toISOString() : target.cleanedAt,
+      cleanedAt,
     }) });
   } catch (error) {
     return adminErrorResponse(error);

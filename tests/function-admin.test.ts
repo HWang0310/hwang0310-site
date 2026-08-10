@@ -21,6 +21,7 @@ import {
   handleAdminAuditRequest,
   type AdminAuditDependencies,
 } from "../functions/projects/income-forecast/api/admin/audit";
+import { sanitizeAuditMetadata } from "../functions/_lib/admin";
 
 const ORIGIN = "https://hwang0310.dpdns.org";
 const assets: Fetcher = {
@@ -265,6 +266,77 @@ describe("income forecast report administration", () => {
     expect(response.status).toBe(200);
     expect(updates).toEqual([{ date: "20260724", pinned: true }]);
   });
+
+  it("deletes report objects before changing metadata when taking a report offline", async () => {
+    const order: string[] = [];
+    const response = await handleAdminReportRequest(
+      jsonRequest("/projects/income-forecast/api/admin/reports/20260724", { action: "set_offline" }),
+      env(),
+      "20260724",
+      reportDeps({
+        removeReportObjects: async () => { order.push("remove"); },
+        updateReport: async () => { order.push("update"); },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(order).toEqual(["remove", "update"]);
+  });
+
+  it("keeps a report online when storage cleanup fails", async () => {
+    const updateReport = vi.fn(async () => undefined);
+    const writeAudit = vi.fn(async () => undefined);
+    const response = await handleAdminReportRequest(
+      jsonRequest("/projects/income-forecast/api/admin/reports/20260724", { action: "set_offline" }),
+      env(),
+      "20260724",
+      reportDeps({
+        removeReportObjects: async () => { throw Object.assign(new Error("storage unavailable"), { status: 503 }); },
+        updateReport,
+        writeAudit,
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(updateReport).not.toHaveBeenCalled();
+    expect(writeAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.report.set_offline",
+      result: false,
+      metadata: { reason: "storage_cleanup_failed" },
+    }));
+  });
+
+  it("rejects mutations for any non-private report, not only the protected dates", async () => {
+    const updateReport = vi.fn(async () => undefined);
+    const removeReportObjects = vi.fn(async () => undefined);
+    const publicReport: AdminReport = {
+      reportDate: "20260726",
+      title: "未来公开例",
+      releaseId: "release-public",
+      storagePrefix: "reports/2026/07/26/",
+      visibility: "public",
+      pinned: false,
+      status: "online",
+      sizeBytes: 10,
+      fileCount: 1,
+      publishedAt: "2026-07-26T00:00:00Z",
+      cleanedAt: null,
+      updatedAt: null,
+    };
+    const response = await handleAdminReportRequest(
+      jsonRequest("/projects/income-forecast/api/admin/reports/20260726", { action: "set_offline" }),
+      env(),
+      "20260726",
+      reportDeps({
+        listReports: async () => [publicReport],
+        updateReport,
+        removeReportObjects,
+      }),
+    );
+    // This deliberately uses a public, non-allowlisted report to prove that
+    // the visibility gate is independent of the protected-date gate.
+    expect(response.status).toBe(409);
+    expect(updateReport).not.toHaveBeenCalled();
+    expect(removeReportObjects).not.toHaveBeenCalled();
+  });
 });
 
 function auditDeps(overrides: Partial<AdminAuditDependencies> = {}): AdminAuditDependencies {
@@ -298,5 +370,12 @@ describe("income forecast audit administration", () => {
       env(), auditDeps(),
     );
     expect(response.status).toBe(400);
+  });
+
+  it("replaces deeply nested metadata instead of exposing its raw value", () => {
+    const metadata = { one: { two: { three: { four: { five: { six: { token: "deep-secret" } } } } } } };
+    const sanitized = sanitizeAuditMetadata(metadata);
+    expect(JSON.stringify(sanitized)).not.toContain("deep-secret");
+    expect(JSON.stringify(sanitized)).toContain("[已隐藏]");
   });
 });

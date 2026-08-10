@@ -271,7 +271,8 @@ function isSensitiveKey(key: string): boolean {
 }
 
 export function sanitizeAuditMetadata(value: unknown, depth = 0): unknown {
-  if (depth > 5 || value === null) return value;
+  if (depth > 5) return "[已隐藏]";
+  if (value === null) return value;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     if (typeof value === "string" && /^(?:eyJ|[A-Fa-f0-9]{32,})/u.test(value)) return "[已隐藏]";
     return value;
