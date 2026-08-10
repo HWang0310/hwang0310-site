@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 const VIEWPORTS = [
@@ -120,5 +121,18 @@ test.describe("income report responsive workbench", () => {
     }));
     expect(printState.overflow).toBe("visible");
     expect(printState.sticky).toBe("static");
+  });
+
+  test("province and city reports have no serious accessibility violations", async ({ page }) => {
+    for (const report of REPORT_PAGES) {
+      await page.goto(report.path, { waitUntil: "networkidle" });
+      const results = await new AxeBuilder({ page }).analyze();
+      expect(
+        results.violations.filter((violation) =>
+          ["serious", "critical"].includes(violation.impact ?? ""),
+        ),
+        report.name,
+      ).toEqual([]);
+    }
   });
 });
