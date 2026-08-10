@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="湖北电信收入预估报告密码重置" />
+    <meta name="theme-color" content="#081625" />
+    <title>重置密码 · 湖北电信收入预估</title>
+    <link rel="stylesheet" href="/src/income-forecast/styles.css" />
+  </head>
+  <body class="if-reset-page">
+    <a class="if-skip-link" href="#reset-main">跳到主要内容</a>
+    <header class="if-header">
+      <div class="if-header-inner">
+        <a class="if-brand" href="/projects/income-forecast/" aria-label="返回收入预估报告入口">
+          <span class="if-brand-mark" aria-hidden="true">⌁</span>
+          <span>
+            <strong>湖北电信</strong>
+            <small>收入预估 · Revenue Forecast</small>
+          </span>
+        </a>
+        <a class="if-home-link" href="/projects/income-forecast/">返回报告入口 <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <main id="reset-main" class="if-main if-reset-main">
+      <section class="if-panel if-reset-panel" aria-labelledby="reset-title">
+        <p class="if-eyebrow">ACCOUNT RECOVERY</p>
+        <h1 id="reset-title">重置你的密码</h1>
+        <p class="if-lead">设置一个新的登录密码，完成后会回到报告入口。</p>
+        <form class="if-form" data-reset-form novalidate>
+          <label class="if-field">
+            <span>新密码</span>
+            <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="8" required />
+          </label>
+          <label class="if-field">
+            <span>确认新密码</span>
+            <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
+          </label>
+          <div class="if-form-actions">
+            <button class="if-button if-button-primary" type="submit">保存新密码 <span aria-hidden="true">→</span></button>
+          </div>
+          <p class="if-status" data-reset-status aria-live="polite"></p>
+        </form>
+        <p class="if-status" data-reset-invalid aria-live="polite" hidden></p>
+      </section>
+    </main>
+    <script type="module" src="/src/income-forecast/reset-password.ts"></script>
+  </body>
+</html>
