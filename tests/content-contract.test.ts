@@ -76,6 +76,9 @@ describe("homepage content contract", () => {
     expect(picture?.querySelector("img")?.getAttribute("alt")).toContain(
       "艺术形象"
     );
+
+    const contact = document.querySelector("#contact");
+    expect(section?.nextElementSibling).toBe(contact);
   });
 
   it("preserves public links and excludes the phone number", () => {

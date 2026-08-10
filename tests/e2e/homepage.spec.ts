@@ -9,10 +9,9 @@ const expectedDescription =
 const projectURL = "https://hwang0310.dpdns.org/projects/income-forecast/";
 const expectedReports = [
   { day: "20", date: "20260720" },
-  { day: "24", date: "20260724" },
   { day: "25", date: "20260725" },
-  { day: "26", date: "20260726" },
 ];
+const privateReports = ["24", "26"];
 
 test("publishes complete search and social metadata", async ({ page }) => {
   await page.goto("/");
@@ -169,6 +168,17 @@ test("report archive and thesis are served from the built site", async (
     expect(reportHTML).toContain(`<title>收入预估报告-${date}</title>`);
     expect(reportHTML).toContain(`data-report-date="${date}"`);
   }
+
+  for (const day of privateReports) {
+    const path = `/projects/income-forecast/reports/2026/07/${day}/`;
+    const report = await page.request.get(path);
+    expect([404, 302, 503], `${path} should not be a public static report`).toContain(
+      report.status(),
+    );
+    const reportBody = await report.text();
+    expect(reportBody).not.toMatch(/<title>收入预估报告-202607(?:24|26)<\/title>/u);
+    expect(reportBody).not.toMatch(/data-report-date="202607(?:24|26)"/u);
+  }
 });
 
 test("mobile menu, thesis link, and layout work", async ({ page }, testInfo) => {
@@ -294,7 +304,7 @@ test("reduced-motion preference removes meaningful transitions", async ({ page }
   const dogGuideScrollCalls = await page.evaluate(
     () =>
       (
-        window as Window & {
+        window as unknown as Window & {
           __dogGuideScrollCalls: ScrollIntoViewOptions[];
         }
       ).__dogGuideScrollCalls
