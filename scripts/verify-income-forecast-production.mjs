@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 const DEFAULT_ORIGIN = "https://hwang0310.dpdns.org";
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
 const PUBLIC_REPORT_DATES = Object.freeze(["20260720", "20260725"]);
 const PRIVATE_REPORT_DATES = Object.freeze(["20260724", "20260726"]);
 
@@ -20,12 +21,17 @@ const PRIVATE_PATHS = Object.freeze(
   }),
 );
 
-function normalizeOrigin(value) {
+function normalizeOrigin(value, { allowLoopback = false } = {}) {
   const parsed = new URL(value);
-  if (parsed.protocol !== "https:" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
-    throw new Error("origin must use HTTPS");
+  if (parsed.origin === DEFAULT_ORIGIN) return parsed.origin;
+  if (
+    allowLoopback &&
+    LOOPBACK_HOSTS.has(parsed.hostname) &&
+    (parsed.protocol === "http:" || parsed.protocol === "https:")
+  ) {
+    return parsed.origin;
   }
-  return parsed.origin;
+  throw new Error("origin must be https://hwang0310.dpdns.org");
 }
 
 function parseArgs(argv) {
@@ -43,7 +49,7 @@ function parseArgs(argv) {
       throw new Error(`unknown argument: ${argument}`);
     }
   }
-  return { help: false, origin: normalizeOrigin(origin) };
+  return { help: false, origin: normalizeOrigin(origin, { allowLoopback: true }) };
 }
 
 function safeStatus(status) {
@@ -68,11 +74,14 @@ async function requestStatus(fetchImpl, origin, path, init = {}) {
  * Probes only status codes. It deliberately does not read response bodies or
  * print request headers, cookies, credentials, or API payloads.
  *
- * @param {{ origin?: string, fetchImpl?: typeof fetch, logger?: (line: string) => void }} [options]
+ * @param {{ origin?: string, allowLoopback?: boolean, fetchImpl?: typeof fetch, logger?: (line: string) => void }} [options]
  * @returns {Promise<{ok: boolean, checks: Array<{path: string, status: number | null, expected: string}>, loginStatus: number | null}>}
  */
 export async function runProductionProbe(options = {}) {
-  const origin = normalizeOrigin(options.origin ?? process.env.INCOME_FORECAST_ORIGIN ?? DEFAULT_ORIGIN);
+  const origin = normalizeOrigin(
+    options.origin ?? process.env.INCOME_FORECAST_ORIGIN ?? DEFAULT_ORIGIN,
+    { allowLoopback: options.allowLoopback === true },
+  );
   const fetchImpl = options.fetchImpl ?? fetch;
   const logger = options.logger ?? ((line) => console.log(line));
   const checks = [];
@@ -95,13 +104,17 @@ export async function runProductionProbe(options = {}) {
   let loginStatus = null;
   const phone = process.env.INCOME_FORECAST_TEST_PHONE;
   const password = process.env.INCOME_FORECAST_TEST_PASSWORD;
-  if ((phone && !password) || (!phone && password)) {
+  const hasPhone = typeof phone === "string" && phone.length > 0;
+  const hasPassword = typeof password === "string" && password.length > 0;
+  if ((hasPhone || hasPassword) && origin !== DEFAULT_ORIGIN) {
+    logger("测试登录仅在正式站点执行，已跳过");
+  } else if (hasPhone !== hasPassword) {
     logger("测试登录配置不完整，已跳过");
     ok = false;
-  } else if (phone && password) {
+  } else if (hasPhone && hasPassword) {
     loginStatus = await requestStatus(fetchImpl, origin, "/projects/income-forecast/api/session", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", Origin: origin },
       body: JSON.stringify({ phone, password, next: "/projects/income-forecast/" }),
     });
     logger(`测试登录 -> ${safeStatus(loginStatus)}`);
@@ -129,7 +142,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         "用法：node scripts/verify-income-forecast-production.mjs [--origin https://hwang0310.dpdns.org]\n",
       );
     } else {
-      const result = await runProductionProbe({ origin: args.origin });
+      const result = await runProductionProbe({ origin: args.origin, allowLoopback: true });
       if (!result.ok) process.exitCode = 1;
     }
   } catch (error) {
