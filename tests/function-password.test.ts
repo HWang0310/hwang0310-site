@@ -513,6 +513,45 @@ describe("forgot-password route", () => {
     expect(wrongBody).not.toContain(duplicate.employeeNo);
   });
 
+  it("fails safely when duplicate names share the same employee-number suffix", async () => {
+    const first = {
+      ...profile,
+      employeeNo: "420001",
+    };
+    const second = {
+      ...profile,
+      userId: "user-2",
+      employeeNo: "990001",
+      phone: "13900139000",
+      email: "other@chinatelecom.cn",
+    };
+    let emailCalls = 0;
+    const setup = forgotDependencies({
+      findActiveProfilesByName: async () => [first, second],
+      sendRecoveryEmail: async () => {
+        emailCalls += 1;
+        return true;
+      },
+    });
+
+    const response = await handleForgotPasswordRequest(
+      request("forgot", {
+        name: profile.fullName,
+        employeeSuffix: "0001",
+      }),
+      env,
+      setup.dependencies,
+    );
+
+    expect(response.status).toBe(400);
+    expect(emailCalls).toBe(0);
+    const responseBody = await response.text();
+    expect(responseBody).not.toContain(first.email);
+    expect(responseBody).not.toContain(second.email);
+    expect(responseBody).not.toContain(first.employeeNo);
+    expect(responseBody).not.toContain(second.employeeNo);
+  });
+
   it("never reports sent when the SMTP-backed Auth call rejects the message", async () => {
     const setup = forgotDependencies({ sendRecoveryEmail: async () => false });
     const response = await handleForgotPasswordRequest(
@@ -796,6 +835,55 @@ describe("recovery password route", () => {
 });
 
 describe("authenticated password-change route", () => {
+  it.each([
+    ["malformed JSON", "{", "application/json"],
+    [
+      "equal passwords",
+      JSON.stringify({ currentPassword: "same-pass", newPassword: "same-pass" }),
+      "application/json",
+    ],
+    [
+      "invalid new password",
+      JSON.stringify({ currentPassword: "old-pass", newPassword: "short" }),
+      "application/json",
+    ],
+  ])("authenticates before reading an anonymous %s request", async (_case, body, contentType) => {
+    let sessionCalls = 0;
+    let reauthCalls = 0;
+    const setup = changeDependencies({
+      getSession: async () => {
+        sessionCalls += 1;
+        return null;
+      },
+      signInWithPassword: async () => {
+        reauthCalls += 1;
+        return authSession;
+      },
+    });
+    const anonymousRequest = new Request(
+      `${ORIGIN}/projects/income-forecast/api/password/change`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": contentType,
+          Origin: ORIGIN,
+        },
+        body,
+      },
+    );
+
+    const response = await handleChangePasswordRequest(
+      anonymousRequest,
+      env,
+      setup.dependencies,
+    );
+
+    expect(response.status).toBe(401);
+    expect(sessionCalls).toBe(1);
+    expect(reauthCalls).toBe(0);
+    expect(anonymousRequest.bodyUsed).toBe(false);
+  });
+
   it("reauthenticates with the trusted profile phone and establishes only a new session", async () => {
     let reauthInput: { phone: string; password: string } | null = null;
     const setup = changeDependencies({

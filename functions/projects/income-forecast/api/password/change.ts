@@ -154,16 +154,16 @@ async function postChangePassword(
   request: Request,
   dependencies: ChangePasswordDependencies,
 ): Promise<Response> {
+  const session = await dependencies.getSession(request);
+  if (session === null) {
+    throw new HttpError(401, "请先登录");
+  }
+
   const body = await readPasswordJson(request, CHANGE_KEYS);
   const oldPassword = currentPassword(body.currentPassword);
   const password = newPassword(body.newPassword);
   if (oldPassword === password) {
     throw new HttpError(400, "新密码不能与当前密码相同");
-  }
-
-  const session = await dependencies.getSession(request);
-  if (session === null) {
-    throw new HttpError(401, "请先登录");
   }
 
   let reauthAccessToken: string | null = null;

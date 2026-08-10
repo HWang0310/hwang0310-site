@@ -236,10 +236,13 @@ async function postForgotPassword(
     return json({ status: "needs_employee_suffix" });
   }
 
-  const matched =
+  const suffixMatches =
     profiles.length === 1
-      ? profiles[0]
-      : profiles.find((candidate) => candidate.employeeNo.endsWith(suffix ?? ""));
+      ? profiles
+      : profiles.filter((candidate) =>
+        candidate.employeeNo.endsWith(suffix ?? "")
+      );
+  const matched = suffixMatches.length === 1 ? suffixMatches[0] : undefined;
   if (matched === undefined) {
     await auditFailure(dependencies, "suffix_mismatch");
     throw new HttpError(400, FORGOT_ERROR);
