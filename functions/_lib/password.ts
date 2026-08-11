@@ -10,6 +10,13 @@ import {
 const MAX_PASSWORD_BODY_BYTES = 4_096;
 const MAX_CURRENT_PASSWORD_BYTES = 1_024;
 const APP_ROLES: ReadonlySet<string> = new Set(["user", "admin", "root_admin"]);
+const INCOME_ROOT = "/projects/income-forecast/";
+
+export type PasswordSessionUser = Readonly<{
+  id: string;
+  name: string;
+  role: AppRole;
+}>;
 
 function invalidRequest(): never {
   throw new HttpError(400, "请求数据无效");
@@ -123,10 +130,22 @@ export function errorResponse(error: unknown, headers?: Headers): Response {
   return json({ error: "密码服务暂不可用" }, { status: 503, headers });
 }
 
-export function sessionResponse(tokens: RefreshedSession): Response {
+export function sessionResponse(
+  tokens: RefreshedSession,
+  user: PasswordSessionUser,
+): Response {
   const headers = new Headers();
   appendSessionCookies(headers, buildSessionCookieHeaders(tokens));
-  return json({ ok: true }, { headers });
+  return json({
+    user: {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      usesInitialPassword: false,
+      mustChangePassword: false,
+    },
+    next: INCOME_ROOT,
+  }, { headers });
 }
 
 export function clearedCookieHeaders(): Headers {

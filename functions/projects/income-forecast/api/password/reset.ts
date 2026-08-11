@@ -288,7 +288,11 @@ async function postResetPassword(
       targetId: profile.userId,
       result: true,
     });
-    return sessionResponse(nextSession);
+    return sessionResponse(nextSession, {
+      id: profile.userId,
+      name: profile.fullName,
+      role: profile.role,
+    });
   } catch (error) {
     await Promise.all([
       bestEffortRevoke(dependencies, recoveryAccessToken),

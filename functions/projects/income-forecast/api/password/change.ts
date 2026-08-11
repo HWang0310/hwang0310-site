@@ -216,7 +216,11 @@ async function postChangePassword(
       targetId: session.id,
       result: true,
     });
-    return sessionResponse(established);
+    return sessionResponse(established, {
+      id: session.id,
+      name: session.name,
+      role: session.role,
+    });
   } catch (error) {
     await Promise.all([
       bestEffortRevoke(dependencies, reauthAccessToken),

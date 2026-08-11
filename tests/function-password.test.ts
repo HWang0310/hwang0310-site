@@ -724,6 +724,16 @@ describe("recovery password route", () => {
       "if_access=new-access; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/",
       "if_refresh=new-refresh; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/",
     ]);
+    expect(await response.json()).toEqual({
+      user: {
+        id: profile.userId,
+        name: profile.fullName,
+        role: profile.role,
+        usesInitialPassword: false,
+        mustChangePassword: false,
+      },
+      next: "/projects/income-forecast/",
+    });
     expect(JSON.stringify(setup.audits)).not.toContain(TOKEN_HASH);
     expect(JSON.stringify(setup.audits)).not.toContain("new-pass");
   });
@@ -924,6 +934,16 @@ describe("authenticated password-change route", () => {
       "if_access=new-access; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/",
       "if_refresh=new-refresh; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/",
     ]);
+    expect(await response.json()).toEqual({
+      user: {
+        id: profile.userId,
+        name: profile.fullName,
+        role: profile.role,
+        usesInitialPassword: false,
+        mustChangePassword: false,
+      },
+      next: "/projects/income-forecast/",
+    });
     expect(JSON.stringify(setup.audits)).not.toContain("old-pass");
     expect(JSON.stringify(setup.audits)).not.toContain("new-pass");
     expect(JSON.stringify(setup.audits)).not.toContain(profile.phone);
