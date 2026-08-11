@@ -179,7 +179,28 @@
             </div>
             <p class="if-panel-caption" data-report-count></p>
           </div>
-          <div class="if-report-grid" data-authenticated-reports></div>
+          <div class="if-report-picker" data-authenticated-reports>
+            <div class="if-report-picker-controls" aria-label="选择报告日期">
+              <label class="if-picker-field" for="report-year">
+                <span>年份</span>
+                <select id="report-year" data-report-year aria-label="选择报告年份" disabled></select>
+              </label>
+              <label class="if-picker-field" for="report-month">
+                <span>月份</span>
+                <select id="report-month" data-report-month aria-label="选择报告月份" disabled></select>
+              </label>
+              <label class="if-picker-field" for="report-day">
+                <span>日期</span>
+                <select id="report-day" data-report-day aria-label="选择报告日期" disabled></select>
+              </label>
+            </div>
+            <div class="if-report-picker-result">
+              <p data-report-selection>正在加载可用报告……</p>
+              <a class="if-button if-button-primary" data-report-open aria-disabled="true" tabindex="-1">
+                打开报告 <span aria-hidden="true">→</span>
+              </a>
+            </div>
+          </div>
           <p class="if-status" data-reports-status aria-live="polite"></p>
         </section>
       </section>

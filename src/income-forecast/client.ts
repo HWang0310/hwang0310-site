@@ -16,6 +16,16 @@ export type IncomeReport = Readonly<{
   online: boolean;
 }>;
 
+export type ReportPickerState = Readonly<{
+  years: readonly string[];
+  months: readonly string[];
+  days: readonly string[];
+  year: string;
+  month: string;
+  day: string;
+  report: IncomeReport | null;
+}>;
+
 type ApiErrorPayload = Readonly<{
   error?: unknown;
   status?: unknown;
@@ -72,9 +82,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 
-function query<T extends Element>(selector: string): T | null {
+function query<T = HTMLElement>(selector: string): T | null {
   if (typeof document === "undefined") return null;
-  return document.querySelector<T>(selector);
+  return document.querySelector(selector) as T | null;
 }
 
 function setHidden(element: Element | null, hidden: boolean): void {
@@ -115,44 +125,111 @@ function formatSize(sizeBytes: number): string {
   return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
 }
 
-function createReportCard(report: IncomeReport, index: number): HTMLAnchorElement {
-  const card = document.createElement("a");
-  card.className = "if-report-card";
-  card.href = report.webPath;
+function descendingUnique(values: readonly string[]): string[] {
+  return [...new Set(values)].sort((left, right) => right.localeCompare(left));
+}
 
-  const number = document.createElement("span");
-  number.className = "if-report-index";
-  number.textContent = String(index + 1).padStart(2, "0");
+export function resolveReportPicker(
+  reports: readonly IncomeReport[],
+  requested: Readonly<{ year?: string; month?: string; day?: string }> = {},
+): ReportPickerState {
+  const available = [...reports]
+    .filter((report) => report.online && /^\d{8}$/u.test(report.date))
+    .sort((left, right) => right.date.localeCompare(left.date));
+  const years = descendingUnique(available.map((report) => report.date.slice(0, 4)));
+  const year = requested.year !== undefined && years.includes(requested.year)
+    ? requested.year
+    : years[0] ?? "";
+  const reportsInYear = available.filter((report) => report.date.startsWith(year));
+  const months = descendingUnique(reportsInYear.map((report) => report.date.slice(4, 6)));
+  const month = requested.month !== undefined && months.includes(requested.month)
+    ? requested.month
+    : months[0] ?? "";
+  const reportsInMonth = reportsInYear.filter(
+    (report) => report.date.slice(4, 6) === month,
+  );
+  const days = descendingUnique(reportsInMonth.map((report) => report.date.slice(6, 8)));
+  const day = requested.day !== undefined && days.includes(requested.day)
+    ? requested.day
+    : days[0] ?? "";
+  const report = reportsInMonth.find((candidate) => candidate.date === `${year}${month}${day}`) ?? null;
+  return { years, months, days, year, month, day, report };
+}
 
-  const body = document.createElement("span");
-  body.className = "if-report-card-body";
-  const title = document.createElement("strong");
-  title.textContent = formatReportDate(report.date);
-  const description = document.createElement("small");
-  description.textContent = report.visibility === "private"
-    ? `权限报告 · ${formatSize(report.sizeBytes)}`
-    : "全省及 17 个地市 · 公开示例";
-  body.appendChild(title);
-  body.appendChild(description);
+let availableReports: readonly IncomeReport[] = [];
 
-  const arrow = document.createElement("span");
-  arrow.className = "if-report-arrow";
-  arrow.setAttribute("aria-hidden", "true");
-  arrow.textContent = "↗";
-  card.appendChild(number);
-  card.appendChild(body);
-  card.appendChild(arrow);
-  return card;
+function fillReportSelect(
+  select: HTMLSelectElement | null,
+  values: readonly string[],
+  selected: string,
+  suffix: "年" | "月" | "日",
+): void {
+  if (select === null) return;
+  select.replaceChildren(...values.map((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = suffix === "年" ? `${value}${suffix}` : `${Number(value)}${suffix}`;
+    option.selected = value === selected;
+    return option;
+  }));
+  select.disabled = values.length === 0;
+}
+
+function renderReportPicker(
+  requested: Readonly<{ year?: string; month?: string; day?: string }> = {},
+): void {
+  const state = resolveReportPicker(availableReports, requested);
+  fillReportSelect(query<HTMLSelectElement>("[data-report-year]"), state.years, state.year, "年");
+  fillReportSelect(query<HTMLSelectElement>("[data-report-month]"), state.months, state.month, "月");
+  fillReportSelect(query<HTMLSelectElement>("[data-report-day]"), state.days, state.day, "日");
+
+  const selection = query<HTMLElement>("[data-report-selection]");
+  const open = query<HTMLAnchorElement>("[data-report-open]");
+  if (state.report === null) {
+    if (selection !== null) selection.textContent = "暂无可用报告";
+    setStatus(query("[data-reports-status]"), "暂无可用报告");
+    if (open !== null) {
+      open.removeAttribute("href");
+      open.setAttribute("aria-disabled", "true");
+      open.tabIndex = -1;
+    }
+    return;
+  }
+
+  setStatus(query("[data-reports-status]"), "");
+
+  if (selection !== null) {
+    const access = state.report.visibility === "private" ? "权限报告" : "公开示例";
+    selection.textContent = `${formatReportDate(state.report.date)} · ${access} · ${formatSize(state.report.sizeBytes)}`;
+  }
+  if (open !== null) {
+    open.href = state.report.webPath;
+    open.removeAttribute("aria-disabled");
+    open.tabIndex = 0;
+  }
 }
 
 function renderReports(reports: readonly IncomeReport[]): void {
-  const container = query<HTMLElement>("[data-authenticated-reports]");
   const count = query<HTMLElement>("[data-report-count]");
-  if (container === null) return;
-  container.replaceChildren();
-  const sorted = [...reports].sort((left, right) => left.date.localeCompare(right.date));
-  sorted.forEach((report, index) => container.appendChild(createReportCard(report, index)));
-  if (count !== null) count.textContent = `${sorted.length} 期在线报告`;
+  availableReports = [...reports];
+  if (count !== null) count.textContent = `${availableReports.length} 期在线报告`;
+  renderReportPicker();
+}
+
+function bindReportPicker(): void {
+  const year = query<HTMLSelectElement>("[data-report-year]");
+  const month = query<HTMLSelectElement>("[data-report-month]");
+  const day = query<HTMLSelectElement>("[data-report-day]");
+  year?.addEventListener("change", () => renderReportPicker({ year: year.value }));
+  month?.addEventListener("change", () => renderReportPicker({
+    year: year?.value,
+    month: month.value,
+  }));
+  day?.addEventListener("change", () => renderReportPicker({
+    year: year?.value,
+    month: month?.value,
+    day: day.value,
+  }));
 }
 
 async function loadReports(): Promise<IncomeReport[]> {
@@ -369,6 +446,7 @@ export async function bootstrapIncomeForecast(): Promise<void> {
   if (typeof document === "undefined" || typeof window === "undefined") return;
   bindLoginForm();
   bindForgotForm();
+  bindReportPicker();
   bindSessionActions();
   bindChangePasswordForm((next) => {
     renderLoggedIn(next);
