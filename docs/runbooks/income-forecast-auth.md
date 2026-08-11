@@ -21,13 +21,31 @@
 https://hwang0310.dpdns.org/projects/income-forecast/reset-password/
 ```
 
-在 **Authentication → Email Templates → Reset password** 中使用 [`supabase/templates/recovery.html`](../../supabase/templates/recovery.html)。链接必须保持为：
+在 **Authentication → Email Templates → Reset password** 中配置仓库内经过测试的两个版本化文件：
+
+- Subject 使用 [`supabase/templates/recovery.subject.txt`](../../supabase/templates/recovery.subject.txt)，内容必须是 `《湖北电信收入预估》密码重置`。
+- Body 使用 [`supabase/templates/recovery.html`](../../supabase/templates/recovery.html)，完整复制 HTML，不在 Dashboard 中临时改写。
+
+正文的操作链接必须保持为：
 
 ```text
 https://hwang0310.dpdns.org/projects/income-forecast/reset-password/?token_hash={{ .TokenHash }}&type=recovery
 ```
 
 不得改用 `{{ .ConfirmationURL }}`，不得在邮件正文中出现 Supabase 项目域名。邮件发送失败时，接口不会返回 `sent`；先在 Dashboard 的 Auth Logs 中查看时间点与错误类型，再检查 SMTP 服务状态、发件限额和垃圾邮件箱。日志和工单不得复制完整邮箱、姓名、令牌或密码。
+
+### 中文重置邮件生产验收
+
+自定义 SMTP、Subject、Body 和 Redirect URLs 保存后，只使用王昊账户完成一次生产找回验收：
+
+1. 在网站“忘记密码”中输入王昊姓名，确认页面只反馈脱敏邮箱。
+2. 确认收到的邮件使用中文主题 `《湖北电信收入预估》密码重置` 和中文正文，不再出现 Supabase 默认英文文案。
+3. 悬停或长按“设置新密码”，确认目标域名是 `hwang0310.dpdns.org`，再点击进入重置页。
+4. 确认重置页加载后地址栏不再保留 `token_hash`，并且刷新页面不会重新显示令牌。
+5. 在页面中自行设置新密码，确认成功后保持登录，旧密码不再能够登录，旧 recovery 链接也不能重复使用。
+6. 验收人不得向 Codex、日志或聊天提供新旧密码，也不得复制完整 recovery 链接；只反馈“收到中文邮件”“链接已打开”“重置成功/失败”。
+
+若邮件仍为英文，说明 Dashboard 尚未保存版本化 Subject/Body；若按钮仍进入 Supabase 域名或打不开，检查模板是否误用了 `{{ .ConfirmationURL }}`，并核对 Redirect URLs。不要通过发送当前密码或临时密码绕过重置流程。
 
 ## Cloudflare Pages 秘密配置
 

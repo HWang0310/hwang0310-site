@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const subjectPath = resolve("supabase/templates/recovery.subject.txt");
 const templatePath = resolve("supabase/templates/recovery.html");
+const runbookPath = resolve("docs/runbooks/income-forecast-auth.md");
 const recoveryUrl =
   "https://hwang0310.dpdns.org/projects/income-forecast/reset-password/?token_hash={{ .TokenHash }}&type=recovery";
 
@@ -43,5 +44,27 @@ describe("hosted recovery email template", () => {
     expect(html).not.toMatch(/当前密码|临时密码|初始密码/gu);
     expect(html).not.toMatch(/<(?:img|script|iframe|link)\b/iu);
     expect(html).not.toMatch(/(?:src|action)=["']https?:\/\//iu);
+  });
+});
+
+describe("recovery email operations", () => {
+  const runbook = readIfPresent(runbookPath);
+
+  it("documents the exact hosted subject, body, and credential boundary", () => {
+    expect(runbook).toContain("supabase/templates/recovery.subject.txt");
+    expect(runbook).toContain("supabase/templates/recovery.html");
+    expect(runbook).toContain("《湖北电信收入预估》密码重置");
+    expect(runbook).toContain("Authentication → Email Templates → Reset password");
+    expect(runbook).toContain("授权码只粘贴到 Supabase Dashboard");
+    expect(runbook).toContain("不得改用 `{{ .ConfirmationURL }}`");
+  });
+
+  it("requires a complete Wang Hao production recovery test without recording passwords", () => {
+    expect(runbook).toContain("王昊账户");
+    expect(runbook).toContain("中文主题");
+    expect(runbook).toContain("中文正文");
+    expect(runbook).toContain("地址栏");
+    expect(runbook).toContain("旧密码不再能够登录");
+    expect(runbook).toContain("不得向 Codex、日志或聊天提供新旧密码");
   });
 });
