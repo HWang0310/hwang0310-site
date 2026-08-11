@@ -132,3 +132,41 @@ Open the link once, confirm the address bar is scrubbed, choose a new password, 
 - [ ] **Step 5: Deploy and sync source**
 
 Deploy the verified site bundle to Cloudflare Pages, run `npm run verify:income`, merge the branch to `main`, and push normally to GitHub without force.
+
+### Task 4: Explain and display the recovery cooldown
+
+**Files:**
+- Modify: `projects/income-forecast/index.html`
+- Modify: `src/income-forecast/client.ts`
+- Modify: `src/income-forecast/styles.css`
+- Test: `tests/income-ui.test.ts`
+- Test: `tests/e2e/income-forecast.spec.ts`
+
+**Interfaces:**
+- Consumes: fixed successful cooldown of 60 seconds and server `IncomeApiError.retryAfterSeconds` for rejected requests.
+- Produces: `recoveryCooldownText(seconds: number): string`, a persistent reminder, and a disabled submit button during the active cooldown.
+
+- [ ] **Step 1: Write failing UI and browser tests**
+
+Assert the static reminder, exported countdown formatter, and disabled submit button with `60秒` feedback after a successful recovery request.
+
+- [ ] **Step 2: Run tests to verify RED**
+
+Run: `npm test -- tests/income-ui.test.ts`
+
+Expected: FAIL because the marker, copy, and formatter do not exist.
+
+- [ ] **Step 3: Implement the minimal cooldown UI**
+
+Add the accessible reminder element, formatter, timer, success cooldown, server-retry cooldown, and minimal muted helper styling. Re-enable the button only after the active cooldown reaches zero.
+
+- [ ] **Step 4: Verify GREEN**
+
+Run:
+
+```bash
+npm test -- tests/income-ui.test.ts
+npx playwright test tests/e2e/income-forecast.spec.ts --project=desktop-chromium --grep "forgot-password"
+```
+
+Expected: both commands exit 0.

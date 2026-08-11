@@ -285,11 +285,19 @@ test("forgot-password feedback names the masked mailbox without exposing extra i
   });
   await page.goto(ROOT);
   await page.getByRole("button", { name: "忘记密码？" }).click();
+  await expect(page.locator("[data-forgot-cooldown]")).toHaveText(
+    "每次发送后需等待60秒才能再次申请，请留意收件箱及垃圾邮件。",
+  );
   await page.locator('[data-forgot-form] input[name="name"]').fill("王昊");
-  await page.locator('[data-forgot-form]').getByRole("button", { name: /发送重置信息/ }).click();
+  const submit = page.locator('[data-forgot-form]').getByRole("button", { name: /发送重置信息/ });
+  await submit.click();
 
   await expect(page.locator("[data-forgot-status]")).toContainText("请前往您的邮箱：w***@example.com");
   await expect(page.locator("[data-forgot-status]")).not.toContainText("13800000000");
+  await expect(submit).toBeDisabled();
+  await expect(page.locator("[data-forgot-cooldown]")).toHaveText(
+    "请等待60秒后再次申请。请留意收件箱及垃圾邮件。",
+  );
 });
 
 test("the income entry has no horizontal overflow at 360px", async ({ page }, testInfo) => {

@@ -6,6 +6,8 @@ import {
   type IncomeSession,
 } from "./income-api";
 const REPORT_ROOT = `${INCOME_ROOT}reports/`;
+const RECOVERY_COOLDOWN_SECONDS = 60;
+const RECOVERY_REMINDER = "每次发送后需等待60秒才能再次申请，请留意收件箱及垃圾邮件。";
 
 export type IncomeReport = Readonly<{
   date: string;
@@ -75,6 +77,15 @@ export function reportPath(date: string): string {
 export function formatReportDate(date: string): string {
   if (!/^\d{8}$/u.test(date)) return "未知日期";
   return `${date.slice(0, 4)}年${Number(date.slice(4, 6))}月${Number(date.slice(6, 8))}日`;
+}
+
+export function recoveryCooldownText(seconds: number): string {
+  const remaining = Number.isFinite(seconds)
+    ? Math.max(0, Math.ceil(seconds))
+    : 0;
+  return remaining > 0
+    ? `请等待${remaining}秒后再次申请。请留意收件箱及垃圾邮件。`
+    : RECOVERY_REMINDER;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -272,11 +283,36 @@ function renderLoggedIn(session: IncomeSession): void {
 function bindForgotForm(): void {
   const form = query<HTMLFormElement>("[data-forgot-form]");
   const status = query("[data-forgot-status]");
+  const cooldown = query<HTMLElement>("[data-forgot-cooldown]");
   const suffixField = query<HTMLElement>("[data-employee-suffix-field]");
   if (form === null) return;
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+  let cooldownUntil = 0;
+  let cooldownTimer: ReturnType<typeof setInterval> | null = null;
+
+  const renderCooldown = (): void => {
+    const remaining = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1_000));
+    if (cooldown !== null) cooldown.textContent = recoveryCooldownText(remaining);
+    if (submit !== null) submit.disabled = remaining > 0;
+    if (remaining === 0 && cooldownTimer !== null) {
+      clearInterval(cooldownTimer);
+      cooldownTimer = null;
+    }
+  };
+
+  const startCooldown = (seconds: number): void => {
+    const safeSeconds = Math.min(3_600, Math.max(1, Math.ceil(seconds)));
+    cooldownUntil = Math.max(cooldownUntil, Date.now() + safeSeconds * 1_000);
+    renderCooldown();
+    if (cooldownTimer === null) cooldownTimer = setInterval(renderCooldown, 1_000);
+  };
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (Date.now() < cooldownUntil) {
+      renderCooldown();
+      return;
+    }
     const name = formValue(form, "name").trim();
     const suffix = formValue(form, "employeeSuffix").trim();
     if (name.length === 0) {
@@ -288,7 +324,6 @@ function bindForgotForm(): void {
       return;
     }
     setStatus(status, "正在发送重置信息……");
-    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (submit !== null) submit.disabled = true;
     try {
       const payload = await apiRequest<unknown>(`${INCOME_ROOT}api/password/forgot`, {
@@ -306,6 +341,7 @@ function bindForgotForm(): void {
         return;
       }
       if (isRecord(payload) && payload.status === "sent") {
+        startCooldown(RECOVERY_COOLDOWN_SECONDS);
         setStatus(status, typeof payload.message === "string"
           ? payload.message
           : "重置信息已发送，请前往您的邮箱查看。", "success");
@@ -315,6 +351,9 @@ function bindForgotForm(): void {
       }
       setStatus(status, "无法发送重置信息，请稍后再试。", "error");
     } catch (error) {
+      if (error instanceof IncomeApiError && error.retryAfterSeconds !== null) {
+        startCooldown(error.retryAfterSeconds);
+      }
       const message = error instanceof IncomeApiError && error.retryAfterSeconds !== null
         ? `${error.message}（请在 ${error.retryAfterSeconds} 秒后重试）`
         : error instanceof Error
@@ -322,7 +361,7 @@ function bindForgotForm(): void {
           : "无法发送重置信息，请稍后再试。";
       setStatus(status, message, "error");
     } finally {
-      if (submit !== null) submit.disabled = false;
+      if (submit !== null) submit.disabled = Date.now() < cooldownUntil;
     }
   });
 }

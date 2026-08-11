@@ -451,6 +451,13 @@ h3 {
   color: var(--if-cyan);
 }
 
+.if-form-help {
+  margin: 0;
+  color: var(--if-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
 .if-recovery,
 .if-change-panel {
   margin-top: 28px;

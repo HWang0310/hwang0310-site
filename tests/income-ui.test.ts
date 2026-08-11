@@ -24,6 +24,8 @@ describe("income forecast progressive-enhancement UI", () => {
     expect(html).toContain("手机号");
     expect(html).toContain("密码");
     expect(html).toContain("忘记密码");
+    expect(html).toContain("每次发送后需等待60秒才能再次申请，请留意收件箱及垃圾邮件。");
+    expect(html).toContain("data-forgot-cooldown");
     expect(html).toContain("/projects/income-forecast/reports/2026/07/20/");
     expect(html).toContain("/projects/income-forecast/reports/2026/07/25/");
     expect(html).not.toContain("/projects/income-forecast/reports/2026/07/24/");
@@ -108,6 +110,19 @@ describe("income forecast client policy", () => {
       "/projects/income-forecast/reports/2026/07/25/",
     );
     expect(client.reportPath("20260724")).not.toContain("supabase");
+  });
+
+  it("formats the recovery cooldown without hiding the mailbox reminder", async () => {
+    const client = await import("../src/income-forecast/client");
+    expect(client.recoveryCooldownText(60)).toBe(
+      "请等待60秒后再次申请。请留意收件箱及垃圾邮件。",
+    );
+    expect(client.recoveryCooldownText(1)).toBe(
+      "请等待1秒后再次申请。请留意收件箱及垃圾邮件。",
+    );
+    expect(client.recoveryCooldownText(0)).toBe(
+      "每次发送后需等待60秒才能再次申请，请留意收件箱及垃圾邮件。",
+    );
   });
 
   it("resolves the newest valid year, month, and day from authorized reports", async () => {
