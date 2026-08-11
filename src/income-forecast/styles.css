@@ -56,20 +56,23 @@ a {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
 button,
 a,
-input {
+input,
+select {
   -webkit-tap-highlight-color: transparent;
 }
 
 button,
 a.if-button,
 .if-report-card,
-.if-home-link {
+.if-home-link,
+.if-picker-field select {
   min-height: 44px;
 }
 
@@ -547,6 +550,74 @@ h3 {
   font-size: 18px;
 }
 
+.if-report-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 18px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--if-line);
+  border-radius: 18px;
+  background: rgba(3, 16, 29, 0.42);
+}
+
+.if-report-picker-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.if-picker-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.if-picker-field span {
+  color: var(--if-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.if-picker-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 0 38px 0 13px;
+  border: 1px solid var(--if-line);
+  border-radius: 12px;
+  color: var(--if-text);
+  background: var(--if-panel-strong);
+}
+
+.if-picker-field select:disabled {
+  cursor: not-allowed;
+  color: var(--if-muted);
+  opacity: 0.62;
+}
+
+.if-report-picker-result {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+  min-width: 210px;
+}
+
+.if-report-picker-result p {
+  max-width: 32rem;
+  margin: 0;
+  color: var(--if-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: right;
+}
+
+.if-report-picker-result [aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
 .if-footer {
   display: flex;
   justify-content: space-between;
@@ -844,8 +915,19 @@ h3 {
   }
 
   .if-form-grid,
-  .if-report-grid {
+  .if-report-grid,
+  .if-report-picker,
+  .if-report-picker-controls {
     grid-template-columns: 1fr;
+  }
+
+  .if-report-picker-result {
+    justify-items: stretch;
+    min-width: 0;
+  }
+
+  .if-report-picker-result p {
+    text-align: left;
   }
 
   .if-form-actions {

@@ -38,7 +38,7 @@ export type ResetPasswordDependencies = {
   markPasswordChanged(userId: string): Promise<void>;
   revokeSessions(accessToken: string): Promise<void>;
   signInWithPassword(
-    phone: string,
+    email: string,
     password: string,
   ): Promise<PasswordAuthSession | null>;
   writeAudit(event: AuditEventInput): Promise<void>;
@@ -180,10 +180,10 @@ function defaultDependencies(
       }
     },
 
-    async signInWithPassword(phone, password) {
+    async signInWithPassword(email, password) {
       try {
         const response = await authClient.auth.signInWithPassword({
-          phone,
+          email,
           password,
         });
         if (response.error !== null) authServiceError();
@@ -266,7 +266,7 @@ async function postResetPassword(
     recoveryAccessToken = null;
 
     const nextSession = await dependencies.signInWithPassword(
-      profile.phone,
+      profile.email,
       password,
     );
     if (

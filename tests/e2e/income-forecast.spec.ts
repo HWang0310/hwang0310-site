@@ -55,6 +55,14 @@ const REPORTS: ReportPayload[] = [
     sizeBytes: 1_100_000,
     online: true,
   },
+  {
+    date: "20260802",
+    webPath: "/projects/income-forecast/reports/2026/08/02/",
+    visibility: "private",
+    pinned: false,
+    sizeBytes: 1_200_000,
+    online: true,
+  },
 ];
 
 async function fulfillJson(route: Route, status: number, payload: unknown): Promise<void> {
@@ -159,6 +167,42 @@ test("initial password is a visible non-blocking notice", async ({ page }) => {
   await expect(page.locator("[data-initial-notice]")).toBeVisible();
   await expect(page.locator("[data-authenticated-reports-area]")).toBeVisible();
   await expect(page.locator("[data-must-change-notice]")).toBeHidden();
+});
+
+test("the authenticated archive cascades year month and day before explicit navigation", async ({ page }) => {
+  await page.route("**/projects/income-forecast/api/session", async (route) => {
+    await fulfillJson(route, 200, {
+      user: {
+        id: "user-picker",
+        name: "日期选择成员",
+        role: "user",
+        usesInitialPassword: false,
+        mustChangePassword: false,
+      },
+      next: ROOT,
+    } satisfies SessionPayload);
+  });
+  await stubReports(page);
+  await page.route(/\/projects\/income-forecast\/reports\/2026\/07\/26\/?$/u, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      body: "<!doctype html><title>私有报告</title><main>20260726</main>",
+    });
+  });
+
+  await page.goto(ROOT);
+  await expect(page.locator("[data-report-year]")).toHaveValue("2026");
+  await expect(page.locator("[data-report-month]")).toHaveValue("08");
+  await expect(page.locator("[data-report-day]")).toHaveValue("02");
+  await expect(page.locator("[data-report-selection]")).toContainText("2026年8月2日");
+
+  await page.locator("[data-report-month]").selectOption("07");
+  await expect(page.locator("[data-report-day]")).toHaveValue("26");
+  await expect(page).toHaveURL(/\/projects\/income-forecast\/$/u);
+
+  await page.locator("[data-report-open]").click();
+  await expect(page).toHaveURL(/\/projects\/income-forecast\/reports\/2026\/07\/26\/$/u);
 });
 
 test("must-change sessions block the private archive", async ({ page }) => {

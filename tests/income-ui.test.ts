@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import type { IncomeReport } from "../src/income-forecast/client";
+
 const entryPath = resolve("projects/income-forecast/index.html");
 const resetPath = resolve("projects/income-forecast/reset-password/index.html");
 
@@ -41,6 +43,14 @@ describe("income forecast progressive-enhancement UI", () => {
       'data-report-list',
       'data-change-password',
       'data-change-open',
+      'data-report-year',
+      'data-report-month',
+      'data-report-day',
+      'data-report-open',
+      'data-report-selection',
+      'for="report-year"',
+      'for="report-month"',
+      'for="report-day"',
     ]) {
       expect(html).toContain(marker);
     }
@@ -98,6 +108,92 @@ describe("income forecast client policy", () => {
       "/projects/income-forecast/reports/2026/07/25/",
     );
     expect(client.reportPath("20260724")).not.toContain("supabase");
+  });
+
+  it("resolves the newest valid year, month, and day from authorized reports", async () => {
+    const client = await import("../src/income-forecast/client");
+    const reports: IncomeReport[] = [
+      {
+        date: "20260720",
+        webPath: client.reportPath("20260720"),
+        visibility: "public",
+        pinned: true,
+        sizeBytes: 0,
+        online: true,
+      },
+      {
+        date: "20260725",
+        webPath: client.reportPath("20260725"),
+        visibility: "public",
+        pinned: true,
+        sizeBytes: 0,
+        online: true,
+      },
+      {
+        date: "20260731",
+        webPath: client.reportPath("20260731"),
+        visibility: "private",
+        pinned: false,
+        sizeBytes: 2_100_000,
+        online: true,
+      },
+      {
+        date: "20260802",
+        webPath: client.reportPath("20260802"),
+        visibility: "private",
+        pinned: false,
+        sizeBytes: 2_200_000,
+        online: true,
+      },
+      {
+        date: "20270103",
+        webPath: client.reportPath("20270103"),
+        visibility: "private",
+        pinned: false,
+        sizeBytes: 2_300_000,
+        online: true,
+      },
+    ];
+
+    expect(client.resolveReportPicker(reports)).toMatchObject({
+      years: ["2027", "2026"],
+      year: "2027",
+      months: ["01"],
+      month: "01",
+      days: ["03"],
+      day: "03",
+      report: reports[4],
+    });
+
+    expect(client.resolveReportPicker(reports, { year: "2026", month: "07" })).toMatchObject({
+      year: "2026",
+      months: ["08", "07"],
+      month: "07",
+      days: ["31", "25", "20"],
+      day: "31",
+      report: reports[2],
+    });
+
+    expect(client.resolveReportPicker(reports, {
+      year: "1999",
+      month: "12",
+      day: "31",
+    })).toMatchObject({
+      year: "2027",
+      month: "01",
+      day: "03",
+      report: reports[4],
+    });
+
+    expect(client.resolveReportPicker([])).toEqual({
+      years: [],
+      months: [],
+      days: [],
+      year: "",
+      month: "",
+      day: "",
+      report: null,
+    });
   });
 });
 
