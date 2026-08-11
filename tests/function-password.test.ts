@@ -845,6 +845,40 @@ describe("recovery password route", () => {
       "if_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/; Max-Age=0",
     ]);
   });
+
+  it("explains that a recovery password must differ from the current password", async () => {
+    let revocations = 0;
+    let signIns = 0;
+    const samePasswordError = Object.assign(
+      new Error("New password should be different from the old password."),
+      { code: "same_password", status: 422 },
+    );
+    const setup = resetDependencies({
+      updatePassword: async () => {
+        throw samePasswordError;
+      },
+      revokeSessions: async () => {
+        revocations += 1;
+      },
+      signInWithPassword: async () => {
+        signIns += 1;
+        return authSession;
+      },
+    });
+
+    const response = await handleResetPasswordRequest(
+      request("reset", { tokenHash: TOKEN_HASH, password: "new-pass" }),
+      env,
+      setup.dependencies,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "新密码不能与当前密码相同，请重新申请重置链接。",
+    });
+    expect(revocations).toBe(1);
+    expect(signIns).toBe(0);
+  });
 });
 
 describe("authenticated password-change route", () => {

@@ -20,6 +20,7 @@ import {
 
 const RESET_KEYS = new Set(["tokenHash", "password"]);
 const INVALID_RECOVERY = "重置链接无效或已过期";
+const SAME_PASSWORD = "新密码不能与当前密码相同，请重新申请重置链接。";
 
 export type PasswordAuthSession = {
   userId: string;
@@ -70,6 +71,20 @@ function profileFromRow(row: {
 
 function authServiceError(): never {
   throw new HttpError(503, "密码服务暂不可用");
+}
+
+function isSamePasswordError(error: unknown): boolean {
+  if (error === null || typeof error !== "object") return false;
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    status?: unknown;
+  };
+  return (
+    candidate.status === 422 &&
+    (candidate.code === "same_password" ||
+      candidate.message === "New password should be different from the old password.")
+  );
 }
 
 function defaultDependencies(
@@ -132,11 +147,15 @@ function defaultDependencies(
     async updatePassword(password) {
       try {
         const response = await authClient.auth.updateUser({ password });
-        if (response.error !== null || response.data.user === null) {
+        if (response.error !== null) {
+          if (isSamePasswordError(response.error)) throw response.error;
+          authServiceError();
+        }
+        if (response.data.user === null) {
           authServiceError();
         }
       } catch (error) {
-        if (error instanceof HttpError) throw error;
+        if (error instanceof HttpError || isSamePasswordError(error)) throw error;
         authServiceError();
       }
     },
@@ -294,6 +313,9 @@ async function postResetPassword(
       role: profile.role,
     });
   } catch (error) {
+    const responseError = isSamePasswordError(error)
+      ? new HttpError(400, SAME_PASSWORD)
+      : error;
     await Promise.all([
       bestEffortRevoke(dependencies, recoveryAccessToken),
       bestEffortRevoke(dependencies, newAccessToken),
@@ -307,7 +329,9 @@ async function postResetPassword(
         result: false,
         metadata: {
           reason:
-            error instanceof HttpError && error.status === 400
+            isSamePasswordError(error)
+              ? "same_password"
+              : responseError instanceof HttpError && responseError.status === 400
               ? "invalid_recovery"
               : "service_failure",
         },
@@ -316,7 +340,7 @@ async function postResetPassword(
       // Preserve the original failure and never expose recovery material.
     }
     return errorResponse(
-      error,
+      responseError,
       passwordMutationStarted ? clearedCookieHeaders() : undefined,
     );
   }
