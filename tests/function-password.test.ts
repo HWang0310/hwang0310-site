@@ -689,6 +689,7 @@ describe("recovery password route", () => {
   it("verifies only recovery token_hash, changes flags, revokes old sessions, and sets new secure cookies", async () => {
     const order: string[] = [];
     let verifyInput: { tokenHash: string; type: "recovery" } | null = null;
+    let signInInput: { email: string; password: string } | null = null;
     const setup = resetDependencies({
       verifyRecoveryToken: async (tokenHash, type) => {
         verifyInput = { tokenHash, type };
@@ -703,7 +704,8 @@ describe("recovery password route", () => {
       revokeSessions: async () => {
         order.push("revoke");
       },
-      signInWithPassword: async () => {
+      signInWithPassword: async (email, password) => {
+        signInInput = { email, password };
         order.push("sign-in");
         return { ...authSession, accessToken: "new-access", refreshToken: "new-refresh" };
       },
@@ -716,6 +718,7 @@ describe("recovery password route", () => {
 
     expect(response.status).toBe(200);
     expect(verifyInput).toEqual({ tokenHash: TOKEN_HASH, type: "recovery" });
+    expect(signInInput).toEqual({ email: profile.email, password: "new-pass" });
     expect(order).toEqual(["password", "profile", "revoke", "sign-in"]);
     expect(response.headers.getSetCookie()).toEqual([
       "if_access=new-access; HttpOnly; Secure; SameSite=Lax; Path=/projects/income-forecast/",
@@ -884,12 +887,21 @@ describe("authenticated password-change route", () => {
     expect(anonymousRequest.bodyUsed).toBe(false);
   });
 
-  it("reauthenticates with the trusted profile phone and establishes only a new session", async () => {
-    let reauthInput: { phone: string; password: string } | null = null;
+  it("reauthenticates with the trusted profile email and establishes only a new session", async () => {
+    let reauthInput: { email: string; password: string } | null = null;
+    let establishInput: { email: string; password: string } | null = null;
     const setup = changeDependencies({
-      signInWithPassword: async (phone, password) => {
-        reauthInput = { phone, password };
+      signInWithPassword: async (email, password) => {
+        reauthInput = { email, password };
         return authSession;
+      },
+      establishSession: async (email, password) => {
+        establishInput = { email, password };
+        return {
+          ...authSession,
+          accessToken: "new-access",
+          refreshToken: "new-refresh",
+        };
       },
     });
     const response = await handleChangePasswordRequest(
@@ -901,7 +913,8 @@ describe("authenticated password-change route", () => {
       setup.dependencies,
     );
     expect(response.status).toBe(200);
-    expect(reauthInput).toEqual({ phone: profile.phone, password: "old-pass" });
+    expect(reauthInput).toEqual({ email: profile.email, password: "old-pass" });
+    expect(establishInput).toEqual({ email: profile.email, password: "new-pass" });
     expect(setup.calls).toEqual([
       "update-password",
       "update-profile",

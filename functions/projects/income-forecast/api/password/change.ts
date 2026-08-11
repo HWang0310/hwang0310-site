@@ -23,14 +23,14 @@ const CHANGE_KEYS = new Set(["currentPassword", "newPassword"]);
 export type ChangePasswordDependencies = {
   getSession(request: Request): Promise<SessionUser | null>;
   signInWithPassword(
-    phone: string,
+    email: string,
     password: string,
   ): Promise<PasswordAuthSession | null>;
   updatePassword(password: string): Promise<void>;
   markPasswordChanged(userId: string): Promise<void>;
   revokeSessions(accessToken: string): Promise<void>;
   establishSession(
-    phone: string,
+    email: string,
     password: string,
   ): Promise<PasswordAuthSession | null>;
   writeAudit(event: AuditEventInput): Promise<void>;
@@ -48,12 +48,12 @@ function defaultDependencies(
   const serviceClient = createServiceRoleSupabaseClient(config);
 
   const signIn = async (
-    phone: string,
+    email: string,
     password: string,
     invalidCredentialsAreNull: boolean,
   ): Promise<PasswordAuthSession | null> => {
     try {
-      const response = await authClient.auth.signInWithPassword({ phone, password });
+      const response = await authClient.auth.signInWithPassword({ email, password });
       if (response.error !== null) {
         if (invalidCredentialsAreNull && (response.error.status ?? 500) < 500) {
           return null;
@@ -171,7 +171,7 @@ async function postChangePassword(
   let passwordMutationStarted = false;
   try {
     const reauthenticated = await dependencies.signInWithPassword(
-      session.phone,
+      session.email,
       oldPassword,
     );
     if (reauthenticated === null) {
@@ -194,7 +194,7 @@ async function postChangePassword(
     reauthAccessToken = null;
 
     const established = await dependencies.establishSession(
-      session.phone,
+      session.email,
       password,
     );
     if (
